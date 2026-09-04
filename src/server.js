@@ -27,9 +27,10 @@ app.get('/api/dashboard', auth, (_req, res) => {
 });
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
-  if (!b.name || !b.baseUrl || !b.balancePath) return res.status(400).json({ error: '名称、站点地址和余额接口必填' });
+  if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });
+  if (b.panelType === 'generic' && !b.balancePath) return res.status(400).json({ error: '自定义模式必须填写余额接口' });
   const db = readStore(); const old = b.id && db.accounts.find(x => x.id === b.id);
-  const account = { ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim(), balancePath: b.balancePath.trim(), balanceField: b.balanceField || 'balance', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', enabled: b.enabled !== false, credential: b.credential ? encrypt(b.credential) : old?.credential || '', updatedAt: new Date().toISOString() };
+  const account = { ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), panelType: b.panelType || 'auto', userId: b.userId?.trim() || '', balancePath: b.balancePath?.trim() || '', balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', enabled: b.enabled !== false, credential: b.credential ? encrypt(b.credential) : old?.credential || '', updatedAt: new Date().toISOString() };
   if (old) db.accounts[db.accounts.indexOf(old)] = account; else db.accounts.push(account);
   writeStore(db); res.json({ ok: true, id: account.id });
 });

@@ -19,7 +19,9 @@ npm start
 
 ## 接入站点
 
-目前提供“通用 JSON API”适配：填写站点根地址、余额接口与 JSON 字段路径、签到接口，以及 Bearer Token、Cookie 或自定义请求头凭据。例如余额响应为 `{ "data": { "points": 120 } }`，余额字段填 `data.points`。
+默认提供 New API / One API 多站点模板。每个站点只需填写名称、根地址、登录 Cookie 和数字用户 ID，程序会自动发送 `Cookie` 与 `New-Api-User` 请求头，读取 `/api/user/self` 的额度，并调用 `/api/user/checkin` 签到。可以重复添加任意数量的站点。
+
+特殊站点可选择“自定义 JSON API”：填写余额接口与 JSON 字段路径、签到接口，以及 Bearer Token、Cookie 或自定义请求头凭据。例如余额响应为 `{ "data": { "points": 120 } }`，余额字段填 `data.points`。
 
 仅接入你拥有或明确获授权的账户。应用只允许生产环境访问 HTTPS 公网地址，并阻止内网地址，避免被用作内网代理。
 

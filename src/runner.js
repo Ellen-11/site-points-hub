@@ -18,17 +18,22 @@ async function safeUrl(base, endpoint) {
   return url;
 }
 
-function valueAt(obj, dotted) {
+export function valueAt(obj, dotted) {
   return dotted.split('.').reduce((v, k) => v?.[k], obj);
 }
 
-async function call(account, endpoint, method) {
+async function call(account, endpoint, method, panelType = 'generic') {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = { accept: 'application/json', 'user-agent': 'SitePointsHub/1.0' };
   const token = decrypt(account.credential);
-  if (account.authType === 'bearer') headers.authorization = `Bearer ${token}`;
-  if (account.authType === 'cookie') headers.cookie = token;
-  if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
+  if (panelType === 'newapi') {
+    headers.cookie = token;
+    headers['new-api-user'] = String(account.userId || '');
+  } else {
+    if (account.authType === 'bearer') headers.authorization = `Bearer ${token}`;
+    if (account.authType === 'cookie') headers.cookie = token;
+    if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
+  }
   const response = await fetch(url, { method, headers, redirect: 'error', signal: AbortSignal.timeout(15000) });
   const text = await response.text();
   let data;
@@ -37,15 +42,36 @@ async function call(account, endpoint, method) {
   return data;
 }
 
+export function formatNewApiQuota(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `$${(amount / 500000).toFixed(2)}` : '—';
+}
+
+async function runNewApi(account, action) {
+  if (!account.userId) throw new Error('请填写用户 ID');
+  if (!account.credential) throw new Error('请填写登录 Cookie');
+  if (action === 'checkin') await call(account, '/api/user/checkin', 'POST', 'newapi');
+  const data = await call(account, '/api/user/self', 'GET', 'newapi');
+  return formatNewApiQuota(valueAt(data, 'data.quota'));
+}
+
+async function runGeneric(account, action) {
+  if (action === 'checkin') await call(account, account.checkinPath, account.checkinMethod || 'POST');
+  const data = await call(account, account.balancePath, 'GET');
+  const raw = valueAt(data, account.balanceField || 'balance');
+  const divisor = Number(account.balanceDivisor || 1);
+  return divisor !== 1 && Number.isFinite(Number(raw)) ? String(Number(raw) / divisor) : String(raw ?? '—');
+}
+
 export async function runAccount(id, action = 'poll') {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account || !account.enabled) throw new Error('账户不存在或已停用');
   const startedAt = new Date().toISOString();
   try {
-    if (action === 'checkin') await call(account, account.checkinPath, account.checkinMethod || 'POST');
-    const data = await call(account, account.balancePath, 'GET');
-    account.balance = String(valueAt(data, account.balanceField || 'balance') ?? '—');
+    const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
+    account.balance = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
+    account.detectedType = panelType;
     account.lastStatus = 'ok';
     account.lastError = '';
     account.lastCheckedAt = new Date().toISOString();
