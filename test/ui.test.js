@@ -70,5 +70,6 @@ test('batch actions visibly run tagged sites one by one', () => {
   assert.match(source, /async function runBatch/);
   assert.match(source, /for \(let index = 0; index < targets\.length/);
   assert.match(source, /正在.*\$\{index \+ 1\}\/\$\{targets\.length\}/);
-  assert.match(source, /没有可执行的站点/);
+  assert.match(source, /const targets = activeFilter/);
+  assert.match(source, /当前筛选下没有可执行的站点/);
 });

@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-let accounts = []; let tags = []; let enabledPollTags = []; let dashboardData = null; let activeFilter = '';
+let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -25,7 +25,6 @@ async function load() {
     const data = await api('/api/dashboard');
     accounts = data.accounts;
     tags = data.tags || [];
-    enabledPollTags = data.pollTags || [];
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
     $('#logout').classList.remove('hidden');
@@ -183,9 +182,8 @@ window.deleteTag = async tag => {
 };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 async function runBatch(action, button) {
-  const enabled = new Set(enabledPollTags);
-  const targets = accounts.filter(account => (account.tags || []).some(tag => enabled.has(tag)));
-  if (!targets.length) return alert('没有可执行的站点。请先给站点选择标签，并在顶部点亮要轮询的标签。');
+  const targets = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
+  if (!targets.length) return alert('当前筛选下没有可执行的站点。');
   const original = button.textContent; let ok = 0; let failed = 0; button.disabled = true;
   try {
     for (let index = 0; index < targets.length; index += 1) {
