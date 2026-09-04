@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-23">
+  <link rel="stylesheet" href="/style.css?v=20260905-24">
 </head>
 <body>
 <main>
@@ -53,14 +53,15 @@
       <div class="grid"><label>自定义头名称<input name="headerName" placeholder="x-api-key"></label><label>凭据<input name="genericCredential" class="credential" type="password" placeholder="留空则保留原凭据"></label></div>
       <div class="grid"><label>刷新接口<input name="refreshPath" placeholder="/api/user/auth/refresh"></label><label>刷新 Cookie<input name="refreshCookie" class="credential" type="password" placeholder="new_api_refresh=…，留空则保留"></label></div>
       <p class="hint">Bearer 短期失效时使用：遇到 401 会携带刷新 Cookie 调用刷新接口，保存新 Token 和轮换后的 Cookie，再重试一次。</p>
-      <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
-      <p class="hint">当余额使用 Bearer、但浏览器的 pricing 请求只带 Cookie 时填写。不会影响余额与签到认证。</p>
     </div>
+    <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
+    <p class="hint">所有面板类型都可填写；仅用于读取模型价格，不影响余额、签到和网关认证。</p>
     <h2 class="form-section">模型价格</h2>
     <label>API Key<input name="apiKey" type="password" placeholder="sk-…，留空则保留原 Key"></label>
     <p class="hint">保存后在站点卡片点击“选择模型”，程序会拉取并分类所有按次模型及价格，再由你选择一个。</p>
     <p class="hint">仅连接你拥有或获授权的站点；凭据会加密保存。</p>
-    <div class="dialog-actions"><button type="button" id="cancel" class="ghost">取消</button><button>保存</button></div>
+    <p id="accountSaveError" class="error"></p>
+    <div class="dialog-actions"><button type="button" id="cancel" class="ghost">取消</button><button id="accountSaveButton">保存</button></div>
   </form>
 </dialog>
 <dialog id="tagPicker">
@@ -73,6 +74,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260905-23"></script>
+<script src="/app.js?v=20260905-24"></script>
 </body>
 </html>

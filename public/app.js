@@ -160,20 +160,26 @@ $('#addTagForm').onsubmit = async event => {
   try { await api('/api/tags', { method: 'POST', body: JSON.stringify({ tag }) }); form.reset(); load(); }
   catch (error) { alert(error.message); }
 };
-$('#add').onclick = () => { const form = $('#accountForm'); form.reset(); form.elements.id.value = ''; toggleFields(); $('#editor').showModal(); };
+$('#add').onclick = () => { const form = $('#accountForm'); form.reset(); form.elements.id.value = ''; $('#accountSaveError').textContent = ''; toggleFields(); $('#editor').showModal(); };
 $('#cancel').onclick = () => $('#editor').close();
 function toggleFields() { const custom = $('#panelType').value === 'generic'; $('#simpleFields').classList.toggle('hidden', custom); $('#advancedFields').classList.toggle('hidden', !custom); }
 $('#panelType').onchange = toggleFields;
 $('#accountForm').onsubmit = async event => {
   event.preventDefault();
+  const button = $('#accountSaveButton');
+  $('#accountSaveError').textContent = '';
   const values = Object.fromEntries(new FormData(event.target));
   if (values.panelType === 'generic') values.credential = values.genericCredential;
   delete values.genericCredential;
-  await api('/api/accounts', { method: 'POST', body: JSON.stringify(values) });
-  $('#editor').close(); load();
+  button.disabled = true; button.textContent = '正在保存…';
+  try {
+    await api('/api/accounts', { method: 'POST', body: JSON.stringify(values) });
+    $('#editor').close(); await load();
+  } catch (error) { $('#accountSaveError').textContent = error.message; }
+  finally { button.disabled = false; button.textContent = '保存'; }
 };
 
-window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
+window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); $('#accountSaveError').textContent = ''; Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
 let taggingAccount = '';
 window.openTagPicker = id => {

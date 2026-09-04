@@ -355,6 +355,7 @@ async function runGeneric(account, action) {
     if (!account.checkinPath) throw new Error('尚未配置签到接口');
     checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
   }
+  if (!account.balancePath) throw new Error('尚未配置余额接口；模型与价格功能仍可使用');
   const data = await call(account, account.balancePath, 'GET');
   const raw = readConfiguredBalance(data, account.balanceField || 'balance');
   if (raw === undefined) throw new Error(`余额字段 ${account.balanceField || 'balance'} 不存在`);

@@ -39,6 +39,14 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /name="pricingCookie"/);
 });
 
+test('account save reports server validation errors and shows progress', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, /id="accountSaveError"/);
+  assert.match(source, /正在保存/);
+  assert.match(source, /accountSaveError'\)\.textContent = error\.message/);
+});
+
 test('site cards include a real model invocation test', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, />测试模型</);

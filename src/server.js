@@ -48,7 +48,6 @@ app.get('/api/logs', auth, (req, res) => {
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });
-  if (b.panelType === 'generic' && !b.balancePath) return res.status(400).json({ error: '自定义模式必须填写余额接口' });
   const db = readStore(); const old = b.id && db.accounts.find(x => x.id === b.id);
   const tags = b.tags === undefined ? old?.tags || [] : Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(/[,，]/);
   const account = {
