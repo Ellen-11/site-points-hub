@@ -2,8 +2,9 @@ function dayKey(value, timeZone = 'Asia/Shanghai') {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 }
 
-export function gatewayStatistics(runs = [], accounts = [], now = new Date(), timeZone = 'Asia/Shanghai', trendLength = 7) {
-  const events = runs.filter(run => run.action === 'gateway');
+export function gatewayStatistics(runs = [], accounts = [], now = new Date(), timeZone = 'Asia/Shanghai', trendLength = 7, filters = {}) {
+  const allEvents = runs.filter(run => run.action === 'gateway');
+  const events = allEvents.filter(run => (!filters.accountId || run.accountId === filters.accountId) && (!filters.modelName || run.modelName === filters.modelName));
   const accountNames = new Map(accounts.map(account => [account.id, account.name]));
   const requests = new Map();
   for (const event of events) {
@@ -35,7 +36,7 @@ export function gatewayStatistics(runs = [], accounts = [], now = new Date(), ti
       failureMap.set(reason, (failureMap.get(reason) || 0) + 1);
     }
   }
-  const finishRows = map => [...map.values()].map(row => ({ ...row, averageLatencyMs: row.latencyCount ? Math.round(row.latencyTotal / row.latencyCount) : null })).sort((a, b) => b.successful - a.successful || b.attempts - a.attempts);
+  const finishRows = map => [...map.values()].map(row => ({ ...row, successRate: row.attempts ? Math.round(row.successful * 1000 / row.attempts) / 10 : 0, averageLatencyMs: row.latencyCount ? Math.round(row.latencyTotal / row.latencyCount) : null })).sort((a, b) => b.successful - a.successful || b.attempts - a.attempts);
   const all = summarize(requests); const todaySummary = summarize(todayGroups); const monthSummary = summarize(monthGroups);
   const switched = [...requests.values()].filter(items => items.length > 1).length;
   const firstAttemptSuccessful = [...requests.values()].filter(items => items.some(item => item.status === 'ok' && (item.attempt || 1) === 1)).length;
@@ -53,6 +54,8 @@ export function gatewayStatistics(runs = [], accounts = [], now = new Date(), ti
     all: { ...all, switched, firstHitRate: all.requests ? Math.round(firstAttemptSuccessful * 1000 / all.requests) / 10 : 0, averageLatencyMs: successLatencies.length ? Math.round(successLatencies.reduce((a, b) => a + b, 0) / successLatencies.length) : null, p95LatencyMs },
     days, sites: finishRows(siteMap), models: finishRows(modelMap),
     failures: [...failureMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-    endpoints: [...endpointMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    endpoints: [...endpointMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+    filters: { accounts: accounts.map(account => ({ id: account.id, name: account.name })), models: [...new Set(allEvents.map(event => event.modelName).filter(Boolean))].sort((a, b) => a.localeCompare(b)), accountId: filters.accountId || '', modelName: filters.modelName || '' },
+    updatedAt: now.toISOString()
   };
 }

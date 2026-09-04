@@ -19,4 +19,8 @@ test('gateway statistics count logical requests, switches and rankings', () => {
   assert.equal(stats.month.requests, 2);
   assert.deepEqual(stats.failures, [{ name: '网络或其他错误', count: 1 }]);
   assert.equal(stats.sites[0].name, '一号');
+  assert.equal(stats.sites[0].successRate, 50);
+  const filtered = gatewayStatistics(runs, [{ id: 'one', name: '一号' }, { id: 'two', name: '二号' }], new Date('2026-09-05T03:00:00Z'), 'UTC', 7, { modelName: 'gpt-b' });
+  assert.equal(filtered.all.requests, 1);
+  assert.deepEqual(filtered.filters.models, ['gpt-a', 'gpt-b']);
 });

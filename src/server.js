@@ -33,7 +33,8 @@ app.get('/api/dashboard', auth, (_req, res) => {
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
   const days = Number(_req.query.days) === 30 ? 30 : 7;
-  res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai', days));
+  const accountId = String(_req.query.accountId || '').slice(0, 100); const modelName = String(_req.query.modelName || '').slice(0, 200);
+  res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai', days, { accountId, modelName }));
 });
 app.get('/api/logs', auth, (req, res) => {
   const db = readStore();

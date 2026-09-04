@@ -92,7 +92,10 @@ test('left navigation opens a real gateway statistics module', () => {
   assert.match(html, /class="sidebar"/);
   assert.match(html, />调用统计</);
   assert.match(html, /id="trendChart"/);
-  assert.match(source, /\/api\/stats\?days=/);
+  assert.match(source, /\/api\/stats\?\$\{query\}/);
+  assert.match(html, /id="statsAccount"/);
+  assert.match(html, /id="statsModel"/);
+  assert.match(source, /class="success-bar"/);
 });
 
 test('left navigation includes filterable run logs', () => {
