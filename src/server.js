@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
-import { estimateRemainingCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
+import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
 import { installGateway } from './gateway.js';
 
 const app = express();
@@ -55,7 +55,7 @@ app.post('/api/accounts/:id/model', auth, (req, res) => {
   account.modelPrice = {
     type: model.billing === 'call' ? 'per_call' : 'tokens', text: model.text, model: model.name,
     price: model.price, priceUnit: model.priceUnit,
-    estimatedCalls: estimateRemainingCalls(account.balanceRaw, model, account.quotaPerUnit)
+    estimatedCalls: estimateAccountCalls(account, model)
   };
   writeStore(db); res.json({ ok: true, modelName: model.name, modelPrice: account.modelPrice });
 });

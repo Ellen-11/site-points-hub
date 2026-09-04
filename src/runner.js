@@ -166,6 +166,25 @@ export function estimateRemainingCalls(balanceRaw, model, quotaPerUnit = 500000)
   return Math.max(0, Math.floor(available / price));
 }
 
+export function estimateAccountCalls(account, model) {
+  const direct = estimateRemainingCalls(account?.balanceRaw, model, account?.quotaPerUnit);
+  if (direct !== null) return direct;
+  const shown = String(account?.balance ?? '').replace(/,/g, '');
+  const amount = Number(shown.replace(/[^\d.-]/g, ''));
+  if (!Number.isFinite(amount)) return null;
+  const quotaPerUnit = Number(account?.quotaPerUnit) || 500000;
+  if (model?.priceUnit === 'quota') {
+    if (shown.includes('$')) return estimateRemainingCalls(amount * quotaPerUnit, model, quotaPerUnit);
+    if (shown.includes('¥')) return null;
+    if (account?.currency === 'raw' || account?.currency === 'tokens') return estimateRemainingCalls(amount, model, quotaPerUnit);
+    return estimateRemainingCalls(amount * quotaPerUnit, model, quotaPerUnit);
+  }
+  if (model?.priceUnit === 'usd' && (shown.includes('$') || account?.currency === 'usd')) {
+    return estimateRemainingCalls(amount * quotaPerUnit, model, quotaPerUnit);
+  }
+  return null;
+}
+
 export function buildPerCallCatalog(modelsResponse, pricingResponse) {
   return buildModelCatalog(modelsResponse, pricingResponse).filter(x => x.billing === 'call').map(({ billing, ...x }) => x);
 }
@@ -187,7 +206,7 @@ export async function refreshModelCatalog(id) {
   account.quotaPerUnit = quotaPerUnit;
   account.models = buildModelCatalog(models, pricing, quotaPerUnit).map(model => ({
     ...model,
-    estimatedCalls: estimateRemainingCalls(account.balanceRaw, model, quotaPerUnit)
+    estimatedCalls: estimateAccountCalls(account, model)
   }));
   account.modelsCheckedAt = new Date().toISOString();
   writeStore(db);
@@ -263,9 +282,9 @@ export async function runAccount(id, action = 'poll') {
     account.balanceRaw = result.rawBalance;
     account.quotaPerUnit = result.quotaPerUnit || account.quotaPerUnit || 500000;
     if (account.modelPrice?.type === 'per_call') {
-      account.modelPrice.estimatedCalls = estimateRemainingCalls(account.balanceRaw, {
+      account.modelPrice.estimatedCalls = estimateAccountCalls(account, {
         billing: 'call', price: account.modelPrice.price, priceUnit: account.modelPrice.priceUnit
-      }, account.quotaPerUnit);
+      });
     }
     account.detectedType = panelType;
     account.lastStatus = 'ok';

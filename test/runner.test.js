@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -79,4 +79,6 @@ test('estimates remaining uses for per-call models', () => {
   assert.equal(estimateRemainingCalls(0, { billing: 'call', price: 0, priceUnit: 'quota' }), 'unlimited');
   assert.equal(estimateRemainingCalls(null, { billing: 'call', price: 200, priceUnit: 'quota' }), null);
   assert.equal(estimateRemainingCalls(24495, { billing: 'token', price: 200, priceUnit: 'quota' }), null);
+  assert.equal(estimateAccountCalls({ balance: '24,495.00', quotaPerUnit: 1 }, { billing: 'call', price: 200, priceUnit: 'quota' }), 122);
+  assert.equal(estimateAccountCalls({ balance: '$10.00', quotaPerUnit: 500000 }, { billing: 'call', price: 2, priceUnit: 'usd' }), 5);
 });
