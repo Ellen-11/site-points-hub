@@ -12,6 +12,14 @@ function esc(value = '') {
   return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function priceWithEstimate(price = {}) {
+  if (!price.text) return '';
+  if (price.type !== 'per_call') return price.text;
+  if (price.estimatedCalls === 'unlimited') return `${price.text} · 预计不限次数`;
+  if (Number.isInteger(price.estimatedCalls)) return `${price.text} · 预计还可 ${price.estimatedCalls.toLocaleString()} 次`;
+  return `${price.text} · 刷新余额后估算`;
+}
+
 async function load() {
   try {
     const data = await api('/api/dashboard');
@@ -33,7 +41,7 @@ function render(data) {
       <label class="poll-toggle"><input type="checkbox" ${a.pollEnabled !== false ? 'checked' : ''} onchange="togglePoll('${a.id}',this.checked)"> 参与轮询</label>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
       <div class="balance">${esc(a.balance ?? '—')}</div>
-      <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(a.modelPrice?.text || (a.hasApiKey ? '点击选择模型并查看按次价格' : '请先编辑并填写 API Key'))}</span></div>
+      <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
       <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : '<article class="panel"><p>还没有站点，先添加一个。</p></article>';
@@ -73,7 +81,10 @@ let pickingAccount = ''; let pickedModels = []; let activeBilling = 'call';
 function showCategory(category) {
   document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));
   const models = pickedModels.filter(model => model.billing === activeBilling && model.category === category);
-  $('#modelChoices').innerHTML = models.map(model => `<button class="model-choice" data-model="${esc(model.name)}" onclick="chooseModel(this.dataset.model)"><span>${esc(model.name)}</span><strong>${esc(model.text)}</strong></button>`).join('') || '<p>这个分类没有模型。</p>';
+  $('#modelChoices').innerHTML = models.map(model => {
+    const estimate = model.estimatedCalls === 'unlimited' ? ' · 预计不限次数' : Number.isInteger(model.estimatedCalls) ? ` · 预计还可 ${model.estimatedCalls.toLocaleString()} 次` : ' · 刷新余额后估算';
+    return `<button class="model-choice" data-model="${esc(model.name)}" onclick="chooseModel(this.dataset.model)"><span>${esc(model.name)}</span><strong>${esc(model.text + (model.billing === 'call' ? estimate : ''))}</strong></button>`;
+  }).join('') || '<p>这个分类没有模型。</p>';
 }
 function renderCategories() {
   const visible = pickedModels.filter(model => model.billing === activeBilling);

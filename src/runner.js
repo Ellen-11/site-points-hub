@@ -125,13 +125,15 @@ async function callApiKey(account, endpoint) {
 
 export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit = 500000) {
   const available = new Set((modelsResponse?.data || []).map(x => x.id));
-  const prices = Array.isArray(pricingResponse?.data?.models)
+  const customPricing = Array.isArray(pricingResponse?.data?.models);
+  const prices = customPricing
     ? pricingResponse.data.models.map(x => ({
       model_name: x.name,
       quota_type: x.quotaType,
       price_type: x.priceType,
       model_price: x.priceValue,
-      price_label: x.priceLabel
+      price_label: x.priceLabel,
+      price_unit: 'quota'
     }))
     : Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
   return prices
@@ -140,7 +142,7 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       const perCall = Number(x.quota_type) === 1 || x.price_type === 'call';
       if (perCall) {
         if (!Number.isFinite(Number(x.model_price))) return null;
-        return { name: x.model_name, category: modelCategory(x.model_name), billing: 'call', price: Number(x.model_price), text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` };
+        return { name: x.model_name, category: modelCategory(x.model_name), billing: 'call', price: Number(x.model_price), priceUnit: x.price_unit || 'usd', text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` };
       }
       if (x.price_label) return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: Number(x.model_price), text: x.price_label };
       const ratio = Number(x.model_ratio);
@@ -151,6 +153,17 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
     })
     .filter(Boolean)
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+export function estimateRemainingCalls(balanceRaw, model, quotaPerUnit = 500000) {
+  if (!model || model.billing !== 'call') return null;
+  const price = Number(model.price);
+  if (price === 0) return 'unlimited';
+  if (balanceRaw === null || balanceRaw === undefined || balanceRaw === '') return null;
+  const balance = Number(balanceRaw);
+  if (!Number.isFinite(price) || price < 0 || !Number.isFinite(balance)) return null;
+  const available = model.priceUnit === 'quota' ? balance : balance / (Number(quotaPerUnit) || 500000);
+  return Math.max(0, Math.floor(available / price));
 }
 
 export function buildPerCallCatalog(modelsResponse, pricingResponse) {
@@ -171,7 +184,11 @@ export async function refreshModelCatalog(id) {
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
-  account.models = buildModelCatalog(models, pricing, quotaPerUnit);
+  account.quotaPerUnit = quotaPerUnit;
+  account.models = buildModelCatalog(models, pricing, quotaPerUnit).map(model => ({
+    ...model,
+    estimatedCalls: estimateRemainingCalls(account.balanceRaw, model, quotaPerUnit)
+  }));
   account.modelsCheckedAt = new Date().toISOString();
   writeStore(db);
   return account.models;
@@ -214,7 +231,9 @@ async function runNewApi(account, action) {
   let config = {};
   try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
-  return { balance: formatQuota(readRemainingQuota(data), config, account.currency || 'auto'), checkin };
+  const rawBalance = readRemainingQuota(data);
+  const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
+  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, checkin };
 }
 
 async function runGeneric(account, action) {
@@ -229,7 +248,7 @@ async function runGeneric(account, action) {
   const amount = divisor !== 1 && Number.isFinite(Number(raw)) ? Number(raw) / divisor : raw;
   const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';
   const balance = Number.isFinite(Number(amount)) ? `${prefix}${Number(amount).toFixed(2)}` : String(amount ?? '—');
-  return { balance, checkin };
+  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, checkin };
 }
 
 export async function runAccount(id, action = 'poll') {
@@ -241,6 +260,13 @@ export async function runAccount(id, action = 'poll') {
     const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
     const result = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
     account.balance = result.balance;
+    account.balanceRaw = result.rawBalance;
+    account.quotaPerUnit = result.quotaPerUnit || account.quotaPerUnit || 500000;
+    if (account.modelPrice?.type === 'per_call') {
+      account.modelPrice.estimatedCalls = estimateRemainingCalls(account.balanceRaw, {
+        billing: 'call', price: account.modelPrice.price, priceUnit: account.modelPrice.priceUnit
+      }, account.quotaPerUnit);
+    }
     account.detectedType = panelType;
     account.lastStatus = 'ok';
     account.lastError = '';

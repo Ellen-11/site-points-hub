@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
-import { refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
+import { estimateRemainingCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
 import { installGateway } from './gateway.js';
 
 const app = express();
@@ -52,7 +52,11 @@ app.post('/api/accounts/:id/model', auth, (req, res) => {
   const model = account.models?.find(x => x.name === req.body.model);
   if (!model) return res.status(400).json({ error: '请从已拉取的模型中选择' });
   account.modelName = model.name;
-  account.modelPrice = { type: 'per_call', text: model.text, model: model.name };
+  account.modelPrice = {
+    type: model.billing === 'call' ? 'per_call' : 'tokens', text: model.text, model: model.name,
+    price: model.price, priceUnit: model.priceUnit,
+    estimatedCalls: estimateRemainingCalls(account.balanceRaw, model, account.quotaPerUnit)
+  };
   writeStore(db); res.json({ ok: true, modelName: model.name, modelPrice: account.modelPrice });
 });
 app.post('/api/accounts/:id/:action', auth, async (req, res) => { try { res.json(await runAccount(req.params.id, req.params.action)); } catch (e) { res.status(400).json({ error: e.message }); } });
