@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { decrypt, readStore } from './store.js';
-import { safeUrl } from './runner.js';
+import { safeUrl, shouldPoll } from './runner.js';
 
 function authorized(req) {
   const expected = process.env.GATEWAY_API_KEY || '';
@@ -11,8 +11,17 @@ function authorized(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function candidates(model) {
-  return readStore().accounts.filter(account => account.enabled && account.apiKey && account.modelName === model);
+export function selectGatewayCandidates(db) {
+  return db.accounts.filter(account => shouldPoll(account, db.pollTags || []) && account.apiKey && account.modelName);
+}
+
+export function rewriteGatewayBody(body, account) {
+  return { ...body, model: account.modelName };
+}
+
+function candidates() {
+  const db = readStore();
+  return selectGatewayCandidates(db);
 }
 
 async function upstreamRequest(account, endpoint, body) {
@@ -44,7 +53,8 @@ function forward(response, res) {
 export function installGateway(app) {
   app.get('/v1/models', (req, res) => {
     if (!authorized(req)) return res.status(401).json({ error: { message: 'Invalid gateway API key', type: 'authentication_error' } });
-    const models = [...new Set(readStore().accounts.filter(x => x.enabled && x.apiKey && x.modelName).map(x => x.modelName))];
+    const alias = process.env.GATEWAY_MODEL_NAME || 'xiaoju-auto';
+    const models = candidates().length ? [alias] : [];
     res.json({ object: 'list', data: models.map(id => ({ id, object: 'model', created: 0, owned_by: 'site-points-hub' })) });
   });
 
@@ -53,13 +63,13 @@ export function installGateway(app) {
       if (!authorized(req)) return res.status(401).json({ error: { message: 'Invalid gateway API key', type: 'authentication_error' } });
       const model = String(req.body?.model || '');
       if (!model) return res.status(400).json({ error: { message: 'model is required', type: 'invalid_request_error' } });
-      const routes = candidates(model);
-      if (!routes.length) return res.status(404).json({ error: { message: `No upstream configured for model: ${model}`, type: 'model_not_found' } });
+      const routes = candidates();
+      if (!routes.length) return res.status(404).json({ error: { message: 'No polling upstream has both an API key and a selected model', type: 'model_not_found' } });
       const errors = [];
       for (const account of routes) {
         try {
-          const response = await upstreamRequest(account, endpoint, req.body);
-          if (response.status === 429 || response.status >= 500) {
+          const response = await upstreamRequest(account, endpoint, rewriteGatewayBody(req.body, account));
+          if (!response.ok) {
             errors.push(`${account.name}: HTTP ${response.status}`);
             await response.arrayBuffer();
             continue;
