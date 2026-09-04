@@ -47,15 +47,15 @@ function render(data) {
   $('#pollTags').innerHTML = allTags.map(tag => `<button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#filterTags').innerHTML = `<button class="tag-toggle ${activeFilter ? 'ghost' : 'active'}" onclick="setTagFilter('')">全部</button>` + allTags.map(tag => `<button class="tag-toggle ${activeFilter === tag ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="setTagFilter(this.dataset.tag)">${esc(tag)}</button>`).join('');
   const visibleAccounts = activeFilter ? data.accounts.filter(account => (account.tags || []).includes(activeFilter)) : data.accounts;
-  $('#cards').innerHTML = visibleAccounts.length ? visibleAccounts.map((a, index) => `
-    <article class="card">
-      <div class="top"><strong>${esc(a.name)}</strong><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
+  $('#cards').innerHTML = visibleAccounts.length ? visibleAccounts.map(a => `
+    <article class="card" draggable="true" ondragstart="startAccountDrag(event,'${a.id}')" ondragover="dragAccountOver(event)" ondragleave="this.classList.remove('drag-over')" ondrop="dropAccount(event,'${a.id}')" ondragend="endAccountDrag(event)">
+      <div class="top"><strong>${esc(a.name)}</strong><span class="drag-handle" title="拖动排序">⋮⋮</span><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
       <div class="site-tags">${(a.tags || []).map(tag => `<span>${esc(tag)}</span>`).join('') || '<span class="empty-tag">未设置标签</span>'}</div>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="moveAccount('${a.id}',-1)" ${index === 0 ? 'disabled' : ''}>↑ 上移</button><button class="ghost" onclick="moveAccount('${a.id}',1)" ${index === visibleAccounts.length - 1 ? 'disabled' : ''}>↓ 下移</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : `<article class="panel"><p>${activeFilter ? '这个标签下还没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
   $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
     const account = data.accounts.find(x => x.id === r.accountId);
@@ -65,11 +65,20 @@ function render(data) {
 }
 
 window.setTagFilter = tag => { activeFilter = tag; render(dashboardData); };
-window.moveAccount = async (id, direction) => {
+let draggedAccount = '';
+window.startAccountDrag = (event, id) => { draggedAccount = id; event.dataTransfer.effectAllowed = 'move'; event.currentTarget.classList.add('dragging'); };
+window.dragAccountOver = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; event.currentTarget.classList.add('drag-over'); };
+window.endAccountDrag = event => { event.currentTarget.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(card => card.classList.remove('drag-over')); };
+window.dropAccount = async (event, targetId) => {
+  event.preventDefault(); event.currentTarget.classList.remove('drag-over');
+  if (!draggedAccount || draggedAccount === targetId) return;
   const visible = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
-  const index = visible.findIndex(account => account.id === id); const next = index + direction;
-  if (index < 0 || next < 0 || next >= visible.length) return;
-  [visible[index], visible[next]] = [visible[next], visible[index]];
+  const from = visible.findIndex(account => account.id === draggedAccount); const target = visible.findIndex(account => account.id === targetId);
+  if (from < 0 || target < 0) return;
+  const [moved] = visible.splice(from, 1); const rect = event.currentTarget.getBoundingClientRect();
+  let insertAt = visible.findIndex(account => account.id === targetId);
+  if (event.clientY > rect.top + rect.height / 2) insertAt += 1;
+  visible.splice(insertAt, 0, moved); draggedAccount = '';
   await api('/api/accounts/order', { method: 'POST', body: JSON.stringify({ orderedIds: visible.map(account => account.id) }) });
   await load();
 };

@@ -51,8 +51,9 @@ test('polling is controlled by account tags', () => {
 test('tag filter and order controls are available', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, /setTagFilter/);
-  assert.match(source, /moveAccount/);
+  assert.match(source, /draggable="true"/);
+  assert.match(source, /dropAccount/);
   assert.match(source, /\/api\/accounts\/order/);
-  assert.match(source, /↑ 上移/);
-  assert.match(source, /↓ 下移/);
+  assert.doesNotMatch(source, /↑ 上移/);
+  assert.doesNotMatch(source, /↓ 下移/);
 });
