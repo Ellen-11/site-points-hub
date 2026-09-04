@@ -102,10 +102,20 @@ export function pricingAuthType(account) {
 export function modelCategory(name) {
   const value = String(name).toLowerCase();
   if (/gemini/.test(value)) return 'Gemini';
+  if (/gemma/.test(value)) return 'Gemma';
   if (/claude/.test(value)) return 'Claude';
   if (/deepseek/.test(value)) return 'DeepSeek';
   if (/qwen|qwq/.test(value)) return 'Qwen';
   if (/gpt|(^|[-_])o[134]([\-_.]|$)/.test(value)) return 'GPT';
+  if (/grok/.test(value)) return 'Grok';
+  if (/(^|[/_-])glm([/_.-]|$)|zai-org|z-ai/.test(value)) return 'GLM';
+  if (/kimi|moonshot/.test(value)) return 'Kimi';
+  if (/mistral|mixtral|codestral|devstral|ministral/.test(value)) return 'Mistral';
+  if (/minimax/.test(value)) return 'MiniMax';
+  if (/nemotron|nvidia/.test(value)) return 'Nemotron';
+  if (/stepfun|(^|[/_-])step[-_.]/.test(value)) return 'Step';
+  if (/cohere|command-r|north-mini/.test(value)) return 'Cohere';
+  if (/llama|meta\//.test(value)) return 'Llama';
   if (/sora|video|veo/.test(value)) return '视频';
   if (/image|dall-e|flux|midjourney/.test(value)) return '图像';
   return '其他';

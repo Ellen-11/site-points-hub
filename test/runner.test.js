@@ -58,6 +58,17 @@ test('categorizes and keeps only available per-call models', () => {
   assert.equal(modelCategory('claude-3-opus'), 'Claude');
 });
 
+test('recognizes common token-priced model families', () => {
+  assert.equal(modelCategory('zai-org/GLM-5.1-FP8'), 'GLM');
+  assert.equal(modelCategory('o-kimi-k3'), 'Kimi');
+  assert.equal(modelCategory('mistral/devstral-latest'), 'Mistral');
+  assert.equal(modelCategory('gmicloud/minimax-m2.7'), 'MiniMax');
+  assert.equal(modelCategory('nvidia/nemotron-3-ultra'), 'Nemotron');
+  assert.equal(modelCategory('google/gemma-4-31b-it'), 'Gemma');
+  assert.equal(modelCategory('stepfun/step-3.7-flash'), 'Step');
+  assert.equal(modelCategory('cohere/north-mini-code'), 'Cohere');
+});
+
 test('supports custom quota-per-call pricing responses', () => {
   const models = { data: [{ id: 'gemini-2.5-pro' }, { id: 'token-model' }] };
   const pricing = { data: { models: [
