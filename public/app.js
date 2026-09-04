@@ -40,10 +40,13 @@ function render(data) {
   $('#siteCount').textContent = data.accounts.length;
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
+  const allTags = [...new Set(data.accounts.flatMap(account => account.tags || []))].sort((a, b) => a.localeCompare(b));
+  const enabledTags = new Set(data.pollTags || []);
+  $('#pollTags').innerHTML = allTags.map(tag => `<button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button>`).join('') || '<span class="hint">还没有标签，请先编辑站点添加。</span>';
   $('#cards').innerHTML = data.accounts.length ? data.accounts.map(a => `
     <article class="card">
       <div class="top"><strong>${esc(a.name)}</strong><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
-      <label class="poll-toggle"><input type="checkbox" ${a.pollEnabled !== false ? 'checked' : ''} onchange="togglePoll('${a.id}',this.checked)"> 参与轮询</label>
+      <div class="site-tags">${(a.tags || []).map(tag => `<span>${esc(tag)}</span>`).join('') || '<span class="empty-tag">未设置标签</span>'}</div>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
@@ -84,7 +87,7 @@ $('#accountForm').onsubmit = async event => {
   $('#editor').close(); load();
 };
 
-window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
+window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = key === 'tags' && Array.isArray(value) ? value.join('，') : value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
 let pickingAccount = ''; let pickedModels = []; let activeBilling = 'call';
 function showCategory(category) {
@@ -129,7 +132,7 @@ window.testModel = async (id, button) => {
   finally { button.disabled = false; button.textContent = original; }
 };
 $('#closeModels').onclick = () => $('#modelPicker').close();
-window.togglePoll = async (id, enabled) => { try { await api(`/api/accounts/${id}/polling`, { method: 'POST', body: JSON.stringify({ enabled }) }); } catch (error) { alert(error.message); load(); } };
+window.togglePollTag = async (tag, enabled) => { try { await api('/api/poll-tags', { method: 'POST', body: JSON.stringify({ tag, enabled }) }); load(); } catch (error) { alert(error.message); } };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 $('#pollAll').onclick = async () => { await api('/api/run-all/poll', { method: 'POST' }); load(); };
 $('#checkinAll').onclick = async () => { await api('/api/run-all/checkin', { method: 'POST' }); load(); };

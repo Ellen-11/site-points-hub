@@ -37,3 +37,10 @@ test('site cards include a real model invocation test', () => {
   assert.match(source, /\/model-test/);
   assert.match(source, /本次已真实调用/);
 });
+
+test('polling is controlled by account tags', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /#pollTags/);
+  assert.match(source, /togglePollTag/);
+  assert.doesNotMatch(source, /参与轮询<\/label>/);
+});

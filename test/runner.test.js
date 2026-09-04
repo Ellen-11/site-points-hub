@@ -47,10 +47,11 @@ test('pricing reuses each panel login authentication', () => {
   assert.equal(pricingAuthType({ panelType: 'newapi' }), 'newapi');
 });
 
-test('only checked sites participate in polling', () => {
-  assert.equal(shouldPoll({ enabled: true }), true);
-  assert.equal(shouldPoll({ enabled: true, pollEnabled: true }), true);
-  assert.equal(shouldPoll({ enabled: true, pollEnabled: false }), false);
+test('only sites with an enabled tag participate in polling', () => {
+  assert.equal(shouldPoll({ enabled: true, tags: ['常用'] }, ['常用']), true);
+  assert.equal(shouldPoll({ enabled: true, tags: ['备用'] }, ['常用']), false);
+  assert.equal(shouldPoll({ enabled: true, tags: [] }, ['常用']), false);
+  assert.equal(shouldPoll({ enabled: false, tags: ['常用'] }, ['常用']), false);
 });
 
 test('categorizes and keeps only available per-call models', () => {

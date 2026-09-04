@@ -7,7 +7,7 @@ const file = path.join(dir, 'store.json');
 const secret = process.env.APP_SECRET || 'development-only-secret';
 const key = crypto.scryptSync(secret, 'site-points-hub', 32);
 
-const blank = () => ({ accounts: [], runs: [] });
+const blank = () => ({ accounts: [], runs: [], pollTags: [] });
 
 export function readStore() {
   fs.mkdirSync(dir, { recursive: true });

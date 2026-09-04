@@ -347,11 +347,13 @@ export async function runAccount(id, action = 'poll') {
   return account;
 }
 
-export function shouldPoll(account) {
-  return account.enabled && account.pollEnabled !== false;
+export function shouldPoll(account, pollTags = []) {
+  const enabledTags = new Set(pollTags);
+  return account.enabled && Array.isArray(account.tags) && account.tags.some(tag => enabledTags.has(tag));
 }
 
 export async function runAll(action = 'poll') {
-  const ids = readStore().accounts.filter(shouldPoll).map(x => x.id);
+  const db = readStore();
+  const ids = db.accounts.filter(account => shouldPoll(account, db.pollTags || [])).map(x => x.id);
   return Promise.allSettled(ids.map(id => runAccount(id, action)));
 }
