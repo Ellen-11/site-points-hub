@@ -6,3 +6,9 @@ test('add-site action clears the previous edit id', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, /f\.elements\.id\.value=''/);
 });
+
+test('site cards include a safe external link', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /class="site-link"/);
+  assert.match(source, /rel="noopener noreferrer"/);
+});
