@@ -47,20 +47,36 @@ export function formatNewApiQuota(value) {
   return Number.isFinite(amount) ? `$${(amount / 500000).toFixed(2)}` : '—';
 }
 
+export function classifyCheckin(data) {
+  const message = String(data?.message ?? data?.msg ?? '').trim();
+  const already = /已签到|已经签到|重复签到|already\s*(checked|signed)|checked\s*in/i.test(message);
+  if (already) return { status: 'already', message: message || '今日已签到' };
+  if (data?.success === false || data?.ok === false || (typeof data?.code === 'number' && data.code !== 0 && data.code !== 200)) {
+    throw new Error(message || '站点返回签到失败');
+  }
+  return { status: 'ok', message: message || '签到成功' };
+}
+
 async function runNewApi(account, action) {
   if (!account.userId) throw new Error('请填写用户 ID');
   if (!account.credential) throw new Error('请填写登录 Cookie');
-  if (action === 'checkin') await call(account, '/api/user/checkin', 'POST', 'newapi');
+  let checkin;
+  if (action === 'checkin') checkin = classifyCheckin(await call(account, '/api/user/checkin', 'POST', 'newapi'));
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
-  return formatNewApiQuota(valueAt(data, 'data.quota'));
+  return { balance: formatNewApiQuota(valueAt(data, 'data.quota')), checkin };
 }
 
 async function runGeneric(account, action) {
-  if (action === 'checkin') await call(account, account.checkinPath, account.checkinMethod || 'POST');
+  let checkin;
+  if (action === 'checkin') {
+    if (!account.checkinPath) throw new Error('尚未配置签到接口');
+    checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
+  }
   const data = await call(account, account.balancePath, 'GET');
   const raw = valueAt(data, account.balanceField || 'balance');
   const divisor = Number(account.balanceDivisor || 1);
-  return divisor !== 1 && Number.isFinite(Number(raw)) ? String(Number(raw) / divisor) : String(raw ?? '—');
+  const balance = divisor !== 1 && Number.isFinite(Number(raw)) ? String(Number(raw) / divisor) : String(raw ?? '—');
+  return { balance, checkin };
 }
 
 export async function runAccount(id, action = 'poll') {
@@ -70,13 +86,18 @@ export async function runAccount(id, action = 'poll') {
   const startedAt = new Date().toISOString();
   try {
     const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
-    account.balance = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
+    const result = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
+    account.balance = result.balance;
     account.detectedType = panelType;
     account.lastStatus = 'ok';
     account.lastError = '';
     account.lastCheckedAt = new Date().toISOString();
-    if (action === 'checkin') account.lastCheckinAt = account.lastCheckedAt;
-    db.runs.unshift({ id: crypto.randomUUID(), accountId: id, action, status: 'ok', startedAt });
+    if (action === 'checkin') {
+      account.lastCheckinAt = account.lastCheckedAt;
+      account.lastCheckinStatus = result.checkin.status;
+      account.lastCheckinMessage = result.checkin.message;
+    }
+    db.runs.unshift({ id: crypto.randomUUID(), accountId: id, action, status: result.checkin?.status || 'ok', message: result.checkin?.message || '', startedAt });
   } catch (error) {
     account.lastStatus = 'error';
     account.lastError = error.message;
