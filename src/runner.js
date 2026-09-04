@@ -7,7 +7,7 @@ function privateIp(ip) {
     /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || ip.startsWith('169.254.') || ip.startsWith('fc') || ip.startsWith('fd');
 }
 
-async function safeUrl(base, endpoint) {
+export async function safeUrl(base, endpoint) {
   const url = new URL(endpoint || '/', base);
   if (url.protocol !== 'https:' && !(process.env.NODE_ENV !== 'production' && url.hostname === 'localhost')) {
     throw new Error('只允许 HTTPS 站点');

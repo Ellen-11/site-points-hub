@@ -2,6 +2,8 @@
 
 一个自托管的站点账户看板：统一查看余额/积分、手动或定时签到、按间隔轮询，并保留最近运行记录。
 
+同时提供一个 OpenAI 兼容网关。客户端只需配置本服务的 `/v1` 地址和 `GATEWAY_API_KEY`；请求会按模型名路由到保存了该模型和 API Key 的站点。同一模型配置多个站点时按添加顺序尝试，遇到连接错误、429 或 5xx 自动切换，且不记录请求正文。
+
 ## 本地运行
 
 需要 Node.js 20 或更高版本。
@@ -11,6 +13,7 @@ PowerShell：
 ```powershell
 $env:ADMIN_PASSWORD="换成你的管理密码"
 $env:APP_SECRET="换成至少32位随机字符串"
+$env:GATEWAY_API_KEY="换成客户端访问网关时使用的总Key"
 npm install
 npm start
 ```
@@ -33,6 +36,7 @@ npm start
 2. 在服务变量中设置：
    - `ADMIN_PASSWORD`：控制台登录密码
    - `APP_SECRET`：至少 32 位随机字符串
+   - `GATEWAY_API_KEY`：客户端连接统一网关时使用的总 Key
    - `POLL_INTERVAL_MINUTES=30`
    - `AUTO_CHECKIN_HOUR=8`
    - `TZ=Asia/Shanghai`
@@ -40,6 +44,17 @@ npm start
 4. 在 Networking / Domain 中为 Web 端口绑定 Zeabur 域名。
 
 轮询由应用进程内的定时器完成，不依赖 Zeabur Cron。为避免重复签到，建议只运行一个副本。应用启动后的首次轮询会在一个间隔后发生，也可在界面立即手动刷新。
+
+## 统一网关
+
+在每个站点中填写上游 API Key 和模型名称后，客户端配置：
+
+```text
+Base URL: https://你的域名.zeabur.app/v1
+API Key: 你设置的 GATEWAY_API_KEY
+```
+
+支持 `/v1/models`、`/v1/chat/completions`、`/v1/responses` 和 `/v1/embeddings`。只有 429、上游 5xx 或网络错误会触发切换；普通 4xx 会原样返回，避免重复执行无效请求。
 
 ## 已知边界
 

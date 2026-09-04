@@ -2,13 +2,15 @@ import express from 'express';
 import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
 import { refreshModelPrice, runAccount, runAll } from './runner.js';
+import { installGateway } from './gateway.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
 const password = process.env.ADMIN_PASSWORD || 'admin';
 const sessions = new Map();
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
+installGateway(app);
 
 function cookies(req) { return Object.fromEntries((req.headers.cookie || '').split(';').filter(Boolean).map(x => x.trim().split('='))); }
 function auth(req, res, next) { const s = sessions.get(cookies(req).session); if (!s || s < Date.now()) return res.status(401).json({ error: '请先登录' }); next(); }
