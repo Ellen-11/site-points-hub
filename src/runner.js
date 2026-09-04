@@ -71,6 +71,15 @@ export function formatQuota(value, config = {}, preference = 'auto') {
   return `$${usd.toFixed(2)}`;
 }
 
+export function readRemainingQuota(data) {
+  const quota = Number(valueAt(data, 'data.quota'));
+  const total = Number(valueAt(data, 'data.total_quota'));
+  const used = Number(valueAt(data, 'data.used_quota'));
+  if (Number.isFinite(quota) && quota > 0) return quota;
+  if (Number.isFinite(total) && Number.isFinite(used) && total > used) return total - used;
+  return Number.isFinite(quota) ? quota : undefined;
+}
+
 export function classifyCheckin(data) {
   const message = String(data?.message ?? data?.msg ?? '').trim();
   const already = /已签到|已经签到|重复签到|already\s*(checked|signed)|checked\s*in/i.test(message);
@@ -89,7 +98,7 @@ async function runNewApi(account, action) {
   let config = {};
   try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
-  return { balance: formatQuota(valueAt(data, 'data.quota'), config, account.currency || 'auto'), checkin };
+  return { balance: formatQuota(readRemainingQuota(data), config, account.currency || 'auto'), checkin };
 }
 
 async function runGeneric(account, action) {
