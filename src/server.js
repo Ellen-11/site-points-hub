@@ -48,6 +48,13 @@ app.post('/api/tags', auth, (req, res) => {
   const db = readStore(); db.tags = [...new Set([...(db.tags || []), tag])];
   writeStore(db); res.json({ ok: true, tags: db.tags });
 });
+app.delete('/api/tags/:tag', auth, (req, res) => {
+  const tag = String(req.params.tag || '').trim(); const db = readStore();
+  db.tags = (db.tags || []).filter(item => item !== tag);
+  db.pollTags = (db.pollTags || []).filter(item => item !== tag);
+  db.accounts.forEach(account => { account.tags = (account.tags || []).filter(item => item !== tag); });
+  writeStore(db); res.json({ ok: true });
+});
 app.post('/api/accounts/:id/tags', auth, (req, res) => {
   const db = readStore(); const account = db.accounts.find(x => x.id === req.params.id);
   if (!account) return res.status(404).json({ error: '账户不存在' });

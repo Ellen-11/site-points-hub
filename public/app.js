@@ -44,7 +44,7 @@ function render(data) {
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
-  $('#pollTags').innerHTML = allTags.map(tag => `<button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
+  $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#filterTags').innerHTML = `<button class="tag-toggle ${activeFilter ? 'ghost' : 'active'}" onclick="setTagFilter('')">全部</button>` + allTags.map(tag => `<button class="tag-toggle ${activeFilter === tag ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="setTagFilter(this.dataset.tag)">${esc(tag)}</button>`).join('');
   const visibleAccounts = activeFilter ? data.accounts.filter(account => (account.tags || []).includes(activeFilter)) : data.accounts;
   $('#cards').innerHTML = visibleAccounts.length ? visibleAccounts.map(a => `
@@ -174,6 +174,12 @@ window.testModel = async (id, button) => {
 };
 $('#closeModels').onclick = () => $('#modelPicker').close();
 window.togglePollTag = async (tag, enabled) => { try { await api('/api/poll-tags', { method: 'POST', body: JSON.stringify({ tag, enabled }) }); load(); } catch (error) { alert(error.message); } };
+window.deleteTag = async tag => {
+  if (!confirm(`确定删除标签“${tag}”吗？它会从所有站点中移除。`)) return;
+  await api(`/api/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' });
+  if (activeFilter === tag) activeFilter = '';
+  await load();
+};
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 $('#pollAll').onclick = async () => { await api('/api/run-all/poll', { method: 'POST' }); load(); };
 $('#checkinAll').onclick = async () => { await api('/api/run-all/checkin', { method: 'POST' }); load(); };

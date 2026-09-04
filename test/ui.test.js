@@ -57,3 +57,10 @@ test('tag filter and order controls are available', () => {
   assert.doesNotMatch(source, /↑ 上移/);
   assert.doesNotMatch(source, /↓ 下移/);
 });
+
+test('created tags can be deleted with confirmation', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /deleteTag/);
+  assert.match(source, /确定删除标签/);
+  assert.match(source, /method: 'DELETE'/);
+});
