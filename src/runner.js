@@ -37,7 +37,7 @@ async function call(account, endpoint, method, panelType = 'generic') {
   const response = await fetch(url, { method, headers, redirect: 'error', signal: AbortSignal.timeout(15000) });
   const text = await response.text();
   let data;
-  try { data = JSON.parse(text); } catch { data = { message: text.slice(0, 200) }; }
+  try { data = JSON.parse(text); } catch { data = { message: /^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) }; }
   if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
   return data;
 }
@@ -125,10 +125,18 @@ async function callApiKey(account, endpoint) {
 
 export function buildPerCallCatalog(modelsResponse, pricingResponse) {
   const available = new Set((modelsResponse?.data || []).map(x => x.id));
-  const prices = Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
+  const prices = Array.isArray(pricingResponse?.data?.models)
+    ? pricingResponse.data.models.map(x => ({
+      model_name: x.name,
+      quota_type: x.quotaType,
+      price_type: x.priceType,
+      model_price: x.priceValue,
+      price_label: x.priceLabel
+    }))
+    : Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
   return prices
-    .filter(x => Number(x.quota_type) === 1 && available.has(x.model_name) && Number.isFinite(Number(x.model_price)))
-    .map(x => ({ name: x.model_name, category: modelCategory(x.model_name), price: Number(x.model_price), text: `$${Number(x.model_price).toFixed(4)} / 次` }))
+    .filter(x => (Number(x.quota_type) === 1 || x.price_type === 'call') && available.has(x.model_name) && Number.isFinite(Number(x.model_price)))
+    .map(x => ({ name: x.model_name, category: modelCategory(x.model_name), price: Number(x.model_price), text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` }))
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
@@ -136,7 +144,13 @@ export async function refreshModelCatalog(id) {
   const db = readStore(); const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   const auth = pricingAuthType(account);
-  const [models, pricing] = await Promise.all([callApiKey(account, '/v1/models'), call(account, '/api/pricing', 'GET', auth)]);
+  const models = await callApiKey(account, '/v1/models');
+  let pricing;
+  try {
+    pricing = await call(account, '/api/pricing', 'GET', auth);
+    if (!Array.isArray(pricing?.data) && !Array.isArray(pricing?.data?.models)) throw new Error('非价格响应');
+  }
+  catch { pricing = await call(account, '/api/models/pricing', 'GET', auth); }
   account.models = buildPerCallCatalog(models, pricing);
   account.modelsCheckedAt = new Date().toISOString();
   writeStore(db);

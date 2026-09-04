@@ -57,3 +57,12 @@ test('categorizes and keeps only available per-call models', () => {
   assert.deepEqual(buildPerCallCatalog(models, pricing).map(x => [x.name, x.category]), [['gemini-2.5-pro', 'Gemini'], ['gpt-image-1', 'GPT']]);
   assert.equal(modelCategory('claude-3-opus'), 'Claude');
 });
+
+test('supports custom quota-per-call pricing responses', () => {
+  const models = { data: [{ id: 'gemini-2.5-pro' }, { id: 'token-model' }] };
+  const pricing = { data: { models: [
+    { name: 'gemini-2.5-pro', priceLabel: '200 额度/次', priceType: 'call', priceValue: 200, quotaType: 1 },
+    { name: 'token-model', priceLabel: '3 额度/1K tokens', priceType: 'token', priceValue: 3, quotaType: 0 }
+  ] } };
+  assert.deepEqual(buildPerCallCatalog(models, pricing), [{ name: 'gemini-2.5-pro', category: 'Gemini', price: 200, text: '200 额度/次' }]);
+});
