@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-let accounts = [];
+let accounts = []; let tags = [];
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -24,6 +24,7 @@ async function load() {
   try {
     const data = await api('/api/dashboard');
     accounts = data.accounts;
+    tags = data.tags || [];
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
     $('#logout').classList.remove('hidden');
@@ -40,9 +41,9 @@ function render(data) {
   $('#siteCount').textContent = data.accounts.length;
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
-  const allTags = [...new Set(data.accounts.flatMap(account => account.tags || []))].sort((a, b) => a.localeCompare(b));
+  const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
-  $('#pollTags').innerHTML = allTags.map(tag => `<button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button>`).join('') || '<span class="hint">还没有标签，请先编辑站点添加。</span>';
+  $('#pollTags').innerHTML = allTags.map(tag => `<button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#cards').innerHTML = data.accounts.length ? data.accounts.map(a => `
     <article class="card">
       <div class="top"><strong>${esc(a.name)}</strong><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
@@ -51,7 +52,7 @@ function render(data) {
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : '<article class="panel"><p>还没有站点，先添加一个。</p></article>';
   $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
     const account = data.accounts.find(x => x.id === r.accountId);
@@ -74,6 +75,11 @@ $('#loginForm').onsubmit = async event => {
 };
 
 $('#logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.reload(); };
+$('#addTagForm').onsubmit = async event => {
+  event.preventDefault(); const form = event.target; const tag = new FormData(form).get('tag');
+  try { await api('/api/tags', { method: 'POST', body: JSON.stringify({ tag }) }); form.reset(); load(); }
+  catch (error) { alert(error.message); }
+};
 $('#add').onclick = () => { const form = $('#accountForm'); form.reset(); form.elements.id.value = ''; toggleFields(); $('#editor').showModal(); };
 $('#cancel').onclick = () => $('#editor').close();
 function toggleFields() { const custom = $('#panelType').value === 'generic'; $('#simpleFields').classList.toggle('hidden', custom); $('#advancedFields').classList.toggle('hidden', !custom); }
@@ -87,8 +93,21 @@ $('#accountForm').onsubmit = async event => {
   $('#editor').close(); load();
 };
 
-window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = key === 'tags' && Array.isArray(value) ? value.join('，') : value ?? ''; }); toggleFields(); $('#editor').showModal(); };
+window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
+let taggingAccount = '';
+window.openTagPicker = id => {
+  taggingAccount = id; const account = accounts.find(x => x.id === id); const selected = new Set(account.tags || []);
+  $('#tagPickerTitle').textContent = `${account.name} · 选择标签`;
+  $('#tagChoices').innerHTML = tags.map(tag => `<label><input type="checkbox" name="tags" value="${esc(tag)}" ${selected.has(tag) ? 'checked' : ''}> ${esc(tag)}</label>`).join('') || '<p>还没有标签，请先在页面顶部添加。</p>';
+  $('#tagPicker').showModal();
+};
+$('#tagPickerForm').onsubmit = async event => {
+  event.preventDefault(); const selected = new FormData(event.target).getAll('tags');
+  await api(`/api/accounts/${taggingAccount}/tags`, { method: 'POST', body: JSON.stringify({ tags: selected }) });
+  $('#tagPicker').close(); load();
+};
+$('#closeTags').onclick = () => $('#tagPicker').close();
 let pickingAccount = ''; let pickedModels = []; let activeBilling = 'call';
 function showCategory(category) {
   document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));

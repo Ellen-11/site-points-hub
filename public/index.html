@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260904-10">
+  <link rel="stylesheet" href="/style.css?v=20260904-11">
 </head>
 <body>
 <main>
@@ -13,7 +13,7 @@
   <section id="login" class="panel login"><h2>管理员登录</h2><form id="loginForm"><input name="password" type="password" placeholder="管理密码" required><button>进入控制台</button></form><p id="loginError" class="error"></p></section>
   <div id="app" class="hidden">
     <section class="stats"><article><span>站点</span><strong id="siteCount">0</strong></article><article><span>正常</span><strong id="okCount">0</strong></article><article><span>待处理</span><strong id="errorCount">0</strong></article></section>
-    <section class="poll-tags-panel"><div><h2>轮询标签</h2><p>开启标签后，带该标签的站点才参与批量与定时任务。</p></div><div id="pollTags" class="poll-tags"></div></section>
+    <section class="poll-tags-panel"><div><h2>轮询标签</h2><p>先添加标签，再给具体站点选择标签；点亮的标签才参与轮询。</p></div><form id="addTagForm" class="add-tag-form"><input name="tag" maxlength="30" placeholder="新标签名称" required><button>＋ 添加标签</button></form><div id="pollTags" class="poll-tags"></div></section>
     <div class="actions"><button id="pollAll">刷新全部余额</button><button id="checkinAll" class="secondary">全部签到</button><button id="add" class="ghost">＋ 添加站点</button></div>
     <section id="cards" class="cards"></section>
     <section class="panel"><h2>最近运行</h2><div id="runs" class="runs"></div></section>
@@ -28,7 +28,6 @@
     </div>
     <label>显示名称<input name="name" required placeholder="例如：星期五"></label>
     <label>站点地址<input name="baseUrl" type="url" required placeholder="https://api.example.com"></label>
-    <label>标签<input name="tags" placeholder="例如：常用，每日签到"><span class="hint">多个标签用逗号分隔；在首页选择哪些标签参与轮询。</span></label>
     <div id="simpleFields"><div class="grid"><label>用户 ID<input name="userId" placeholder="个人中心显示的数字 ID"></label><label>登录 Cookie<input name="credential" class="credential" type="password" placeholder="留空则保留原 Cookie"></label></div><p class="hint">自动使用 Cookie + New-Api-User 请求头，并读取站点货币设置。</p></div>
     <div id="advancedFields" class="hidden">
       <div class="grid"><label>余额接口<input name="balancePath" placeholder="/api/user"></label><label>余额字段<input name="balanceField" value="balance" placeholder="data.points"></label></div>
@@ -43,12 +42,16 @@
     <div class="dialog-actions"><button type="button" id="cancel" class="ghost">取消</button><button>保存</button></div>
   </form>
 </dialog>
+<dialog id="tagPicker">
+  <div class="model-picker-head"><div><h2 id="tagPickerTitle">选择标签</h2><p>勾选这个站点所属的标签。</p></div><button id="closeTags" class="ghost">关闭</button></div>
+  <form id="tagPickerForm"><div id="tagChoices" class="tag-choices"></div><div class="dialog-actions"><span></span><button>保存标签</button></div></form>
+</dialog>
 <dialog id="modelPicker">
   <div class="model-picker-head"><div><h2 id="modelPickerTitle">选择模型</h2><p>先选计费方式和分类，再从全部模型中挑一个。</p></div><button id="closeModels" class="ghost">关闭</button></div>
   <div id="modelBilling" class="model-categories"><button class="billing-button active" data-billing="call" onclick="setBilling('call')">按次</button><button class="billing-button ghost" data-billing="token" onclick="setBilling('token')">按量</button></div>
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260904-10"></script>
+<script src="/app.js?v=20260904-11"></script>
 </body>
 </html>

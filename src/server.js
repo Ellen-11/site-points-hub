@@ -26,20 +26,35 @@ app.post('/api/login', (req, res) => {
 app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'session=; Path=/; Max-Age=0'); res.json({ ok: true }); });
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
-  res.json({ accounts: db.accounts.map(({ credential, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), pollTags: db.pollTags || [], runs: db.runs.slice(0, 30) });
+  const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
+  res.json({ accounts: db.accounts.map(({ credential, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30) });
 });
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });
   if (b.panelType === 'generic' && !b.balancePath) return res.status(400).json({ error: '自定义模式必须填写余额接口' });
   const db = readStore(); const old = b.id && db.accounts.find(x => x.id === b.id);
-  const tags = Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(/[,，]/);
+  const tags = b.tags === undefined ? old?.tags || [] : Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(/[,，]/);
   const account = { ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), panelType: b.panelType || 'auto', currency: b.currency || 'auto', userId: b.userId?.trim() || '', modelName: b.modelName !== undefined ? b.modelName.trim() : old?.modelName || '', tags: [...new Set(tags.map(x => String(x).trim()).filter(Boolean))].slice(0, 10), balancePath: b.balancePath?.trim() || '', balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', enabled: b.enabled !== false, credential: b.credential ? encrypt(b.credential) : old?.credential || '', apiKey: b.apiKey ? encrypt(b.apiKey.replace(/^Bearer\s+/i, '')) : old?.apiKey || '', updatedAt: new Date().toISOString() };
   if (old?.modelName !== account.modelName) account.modelPrice = null;
   if (old) db.accounts[db.accounts.indexOf(old)] = account; else db.accounts.push(account);
   writeStore(db); res.json({ ok: true, id: account.id });
 });
 app.delete('/api/accounts/:id', auth, (req, res) => { const db = readStore(); db.accounts = db.accounts.filter(x => x.id !== req.params.id); writeStore(db); res.json({ ok: true }); });
+app.post('/api/tags', auth, (req, res) => {
+  const tag = String(req.body.tag || '').trim();
+  if (!tag) return res.status(400).json({ error: '标签不能为空' });
+  if (tag.length > 30) return res.status(400).json({ error: '标签最多 30 个字' });
+  const db = readStore(); db.tags = [...new Set([...(db.tags || []), tag])];
+  writeStore(db); res.json({ ok: true, tags: db.tags });
+});
+app.post('/api/accounts/:id/tags', auth, (req, res) => {
+  const db = readStore(); const account = db.accounts.find(x => x.id === req.params.id);
+  if (!account) return res.status(404).json({ error: '账户不存在' });
+  const known = new Set([...(db.tags || []), ...db.accounts.flatMap(item => item.tags || [])]);
+  account.tags = [...new Set((Array.isArray(req.body.tags) ? req.body.tags : []).map(x => String(x).trim()).filter(tag => known.has(tag)))];
+  writeStore(db); res.json({ ok: true, tags: account.tags });
+});
 app.post('/api/poll-tags', auth, (req, res) => {
   const tag = String(req.body.tag || '').trim();
   if (!tag) return res.status(400).json({ error: '标签不能为空' });
