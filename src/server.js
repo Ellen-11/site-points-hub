@@ -34,6 +34,15 @@ app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
   res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai'));
 });
+app.get('/api/logs', auth, (req, res) => {
+  const db = readStore();
+  const action = String(req.query.action || ''); const status = String(req.query.status || ''); const accountId = String(req.query.accountId || '');
+  const allowedActions = new Set(['', 'gateway', 'poll', 'checkin']); const allowedStatuses = new Set(['', 'ok', 'error', 'already']);
+  if (!allowedActions.has(action) || !allowedStatuses.has(status)) return res.status(400).json({ error: '筛选条件无效' });
+  const accountNames = new Map(db.accounts.map(account => [account.id, account.name]));
+  const runs = db.runs.filter(run => (!action || run.action === action) && (!status || run.status === status) && (!accountId || run.accountId === accountId)).slice(0, 500);
+  res.json({ runs: runs.map(run => ({ ...run, accountName: accountNames.get(run.accountId) || '已删除站点' })), accounts: db.accounts.map(account => ({ id: account.id, name: account.name })) });
+});
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });

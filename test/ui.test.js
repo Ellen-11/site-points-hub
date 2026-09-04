@@ -81,9 +81,9 @@ test('batch actions visibly run tagged sites one by one', () => {
   assert.match(source, /当前筛选下没有可执行的站点/);
 });
 
-test('recent runs distinguish gateway traffic', () => {
+test('run logs distinguish gateway traffic', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(source, /r\.action === 'gateway' \? '网关'/);
+  assert.match(source, /run\.action === 'gateway' \? '网关'/);
 });
 
 test('left navigation opens a real gateway statistics module', () => {
@@ -93,4 +93,14 @@ test('left navigation opens a real gateway statistics module', () => {
   assert.match(html, />调用统计</);
   assert.match(html, /id="trendChart"/);
   assert.match(source, /api\('\/api\/stats'/);
+});
+
+test('left navigation includes filterable run logs', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, />运行日志</);
+  assert.match(html, /id="logAction"/);
+  assert.match(html, /id="logStatus"/);
+  assert.match(html, /id="logAccount"/);
+  assert.match(source, /\/api\/logs\?/);
 });

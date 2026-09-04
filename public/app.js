@@ -57,19 +57,15 @@ function render(data) {
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
       <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : `<article class="panel"><p>${activeFilter ? '这个标签下还没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
-  $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
-    const account = data.accounts.find(x => x.id === r.accountId);
-    const label = r.status === 'already' ? '已签到' : r.status === 'ok' ? '成功' : '失败';
-    const actionLabel = r.action === 'checkin' ? '签到' : r.action === 'gateway' ? '网关' : '轮询';
-    return `<div><span>${esc(account?.name || '已删除站点')}</span><span>${actionLabel}</span><span class="${r.status}">${label}</span><span>${esc(r.message || new Date(r.startedAt).toLocaleString())}</span></div>`;
-  }).join('') : '<p>暂无运行记录</p>';
 }
 
 window.showView = view => {
   $('#dashboardView').classList.toggle('hidden', view !== 'dashboard');
   $('#statsView').classList.toggle('hidden', view !== 'stats');
+  $('#logsView').classList.toggle('hidden', view !== 'logs');
   document.querySelectorAll('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
   if (view === 'stats') loadStats();
+  if (view === 'logs') loadLogs();
 };
 
 window.loadStats = async () => {
@@ -87,6 +83,23 @@ window.loadStats = async () => {
     $('#modelRanking').innerHTML = rows(data.models);
   } catch (error) { alert(`统计加载失败：${error.message}`); }
 };
+
+window.loadLogs = async () => {
+  try {
+    const query = new URLSearchParams({ action: $('#logAction').value, status: $('#logStatus').value, accountId: $('#logAccount').value });
+    const data = await api(`/api/logs?${query}`);
+    const selected = $('#logAccount').value;
+    $('#logAccount').innerHTML = '<option value="">全部站点</option>' + data.accounts.map(account => `<option value="${esc(account.id)}">${esc(account.name)}</option>`).join('');
+    $('#logAccount').value = selected;
+    $('#logResults').innerHTML = data.runs.map(run => {
+      const action = run.action === 'gateway' ? '网关' : run.action === 'checkin' ? '签到' : '轮询';
+      const result = run.status === 'ok' ? '成功' : run.status === 'already' ? '已签到' : '失败';
+      const details = [run.modelName, Number.isFinite(run.latencyMs) ? `${run.latencyMs} ms` : '', run.statusCode ? `HTTP ${run.statusCode}` : ''].filter(Boolean).join(' · ');
+      return `<article><time>${new Date(run.startedAt).toLocaleString()}</time><strong>${esc(run.accountName)}</strong><span class="log-kind">${action}</span><span class="${run.status}">${result}</span><p>${esc(details || run.message || '—')}</p></article>`;
+    }).join('') || '<p>当前筛选下没有日志。</p>';
+  } catch (error) { alert(`日志加载失败：${error.message}`); }
+};
+for (const selector of ['#logAction', '#logStatus', '#logAccount']) document.addEventListener('change', event => { if (event.target.matches(selector)) loadLogs(); });
 
 window.setTagFilter = tag => { activeFilter = tag; render(dashboardData); };
 let draggedAccount = '';
