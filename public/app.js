@@ -30,6 +30,7 @@ function render(data) {
   $('#cards').innerHTML = data.accounts.length ? data.accounts.map(a => `
     <article class="card">
       <div class="top"><strong>${esc(a.name)}</strong><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
+      <label class="poll-toggle"><input type="checkbox" ${a.pollEnabled !== false ? 'checked' : ''} onchange="togglePoll('${a.id}',this.checked)"> 参与轮询</label>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
       <div class="balance">${esc(a.balance ?? '—')}</div>
       ${a.modelName ? `<div class="model-box"><strong>${esc(a.modelName)}</strong><span>${esc(a.modelPrice?.text || '价格尚未查询')}</span></div>` : ''}
@@ -69,6 +70,7 @@ $('#accountForm').onsubmit = async event => {
 window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
 window.pricing = async id => { try { await api(`/api/accounts/${id}/pricing`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
+window.togglePoll = async (id, enabled) => { try { await api(`/api/accounts/${id}/polling`, { method: 'POST', body: JSON.stringify({ enabled }) }); } catch (error) { alert(error.message); load(); } };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 $('#pollAll').onclick = async () => { await api('/api/run-all/poll', { method: 'POST' }); load(); };
 $('#checkinAll').onclick = async () => { await api('/api/run-all/checkin', { method: 'POST' }); load(); };

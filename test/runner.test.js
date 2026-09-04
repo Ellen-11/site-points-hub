@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCheckin, formatNewApiQuota, formatQuota, pricingAuthType, readRemainingQuota, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { classifyCheckin, formatNewApiQuota, formatQuota, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -39,4 +39,10 @@ test('pricing reuses each panel login authentication', () => {
   assert.equal(pricingAuthType({ panelType: 'generic' }), 'generic');
   assert.equal(pricingAuthType({ panelType: 'auto' }), 'newapi');
   assert.equal(pricingAuthType({ panelType: 'newapi' }), 'newapi');
+});
+
+test('only checked sites participate in polling', () => {
+  assert.equal(shouldPoll({ enabled: true }), true);
+  assert.equal(shouldPoll({ enabled: true, pollEnabled: true }), true);
+  assert.equal(shouldPoll({ enabled: true, pollEnabled: false }), false);
 });

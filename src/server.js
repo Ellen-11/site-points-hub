@@ -38,6 +38,12 @@ app.post('/api/accounts', auth, (req, res) => {
   writeStore(db); res.json({ ok: true, id: account.id });
 });
 app.delete('/api/accounts/:id', auth, (req, res) => { const db = readStore(); db.accounts = db.accounts.filter(x => x.id !== req.params.id); writeStore(db); res.json({ ok: true }); });
+app.post('/api/accounts/:id/polling', auth, (req, res) => {
+  const db = readStore(); const account = db.accounts.find(x => x.id === req.params.id);
+  if (!account) return res.status(404).json({ error: '账户不存在' });
+  account.pollEnabled = req.body.enabled === true;
+  writeStore(db); res.json({ ok: true, pollEnabled: account.pollEnabled });
+});
 app.post('/api/accounts/:id/pricing', auth, async (req, res) => { try { res.json(await refreshModelPrice(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/accounts/:id/:action', auth, async (req, res) => { try { res.json(await runAccount(req.params.id, req.params.action)); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/run-all/:action', auth, async (req, res) => { await runAll(req.params.action); res.json({ ok: true }); });

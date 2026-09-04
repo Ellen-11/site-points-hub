@@ -184,7 +184,11 @@ export async function runAccount(id, action = 'poll') {
   return account;
 }
 
+export function shouldPoll(account) {
+  return account.enabled && account.pollEnabled !== false;
+}
+
 export async function runAll(action = 'poll') {
-  const ids = readStore().accounts.filter(x => x.enabled).map(x => x.id);
+  const ids = readStore().accounts.filter(shouldPoll).map(x => x.id);
   return Promise.allSettled(ids.map(id => runAccount(id, action)));
 }
