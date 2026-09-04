@@ -25,3 +25,8 @@ test('login explicitly sends cookies and shows progress', () => {
   assert.match(source, /正在登录/);
   assert.match(source, /await load\(\)/);
 });
+
+test('dashboard accepts accounts without a selected model price', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(!price\?\.text\) return ''/);
+});

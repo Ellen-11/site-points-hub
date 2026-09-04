@@ -13,7 +13,7 @@ function esc(value = '') {
 }
 
 function priceWithEstimate(price = {}) {
-  if (!price.text) return '';
+  if (!price?.text) return '';
   if (price.type !== 'per_call') return price.text;
   if (price.estimatedCalls === 'unlimited') return `${price.text} · 预计不限次数`;
   if (Number.isInteger(price.estimatedCalls)) return `${price.text} · 预计还可 ${price.estimatedCalls.toLocaleString()} 次`;
