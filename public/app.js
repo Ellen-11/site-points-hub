@@ -69,25 +69,32 @@ $('#accountForm').onsubmit = async event => {
 
 window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
-let pickingAccount = ''; let pickedModels = [];
+let pickingAccount = ''; let pickedModels = []; let activeBilling = 'call';
 function showCategory(category) {
   document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));
-  const models = pickedModels.filter(model => model.category === category);
-  $('#modelChoices').innerHTML = models.map(model => `<button class="model-choice" data-model="${esc(model.name)}" onclick="chooseModel(this.dataset.model)"><span>${esc(model.name)}</span><strong>${esc(model.text)}</strong></button>`).join('') || '<p>这个分类没有按次模型。</p>';
+  const models = pickedModels.filter(model => model.billing === activeBilling && model.category === category);
+  $('#modelChoices').innerHTML = models.map(model => `<button class="model-choice" data-model="${esc(model.name)}" onclick="chooseModel(this.dataset.model)"><span>${esc(model.name)}</span><strong>${esc(model.text)}</strong></button>`).join('') || '<p>这个分类没有模型。</p>';
 }
+function renderCategories() {
+  const visible = pickedModels.filter(model => model.billing === activeBilling);
+  const categories = [...new Set(visible.map(model => model.category))];
+  $('#modelCategories').innerHTML = categories.map(category => `<button class="category-button ghost" data-category="${esc(category)}" onclick="showCategory('${esc(category)}')">${esc(category)} <small>${visible.filter(model => model.category === category).length}</small></button>`).join('') || `<p>没有找到可用的${activeBilling === 'call' ? '按次' : '按量'}模型。</p>`;
+  $('#modelChoices').innerHTML = '';
+  if (categories.length) showCategory(categories[0]);
+}
+window.setBilling = billing => { activeBilling = billing; document.querySelectorAll('.billing-button').forEach(button => { const active = button.dataset.billing === billing; button.classList.toggle('active', active); button.classList.toggle('ghost', !active); }); renderCategories(); };
 window.openModels = async id => {
   pickingAccount = id;
   const account = accounts.find(x => x.id === id);
   if (!account?.hasApiKey) return alert('请先编辑站点并填写 API Key');
-  $('#modelPickerTitle').textContent = `${account.name} · 选择按次模型`;
+  $('#modelPickerTitle').textContent = `${account.name} · 选择模型`;
   $('#modelCategories').innerHTML = '<p>正在拉取模型和价格…</p>';
   $('#modelChoices').innerHTML = '';
   $('#modelPicker').showModal();
   try {
     pickedModels = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
-    const categories = [...new Set(pickedModels.map(model => model.category))];
-    $('#modelCategories').innerHTML = categories.map(category => `<button class="category-button ghost" data-category="${esc(category)}" onclick="showCategory('${esc(category)}')">${esc(category)} <small>${pickedModels.filter(model => model.category === category).length}</small></button>`).join('') || '<p>没有找到可用的按次模型。</p>';
-    if (categories.length) showCategory(categories[0]);
+    activeBilling = 'call';
+    setBilling('call');
   } catch (error) { $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`; }
 };
 window.showCategory = showCategory;

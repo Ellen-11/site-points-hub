@@ -123,7 +123,7 @@ async function callApiKey(account, endpoint) {
   return data;
 }
 
-export function buildPerCallCatalog(modelsResponse, pricingResponse) {
+export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit = 500000) {
   const available = new Set((modelsResponse?.data || []).map(x => x.id));
   const prices = Array.isArray(pricingResponse?.data?.models)
     ? pricingResponse.data.models.map(x => ({
@@ -135,9 +135,26 @@ export function buildPerCallCatalog(modelsResponse, pricingResponse) {
     }))
     : Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
   return prices
-    .filter(x => (Number(x.quota_type) === 1 || x.price_type === 'call') && available.has(x.model_name) && Number.isFinite(Number(x.model_price)))
-    .map(x => ({ name: x.model_name, category: modelCategory(x.model_name), price: Number(x.model_price), text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` }))
+    .filter(x => available.has(x.model_name))
+    .map(x => {
+      const perCall = Number(x.quota_type) === 1 || x.price_type === 'call';
+      if (perCall) {
+        if (!Number.isFinite(Number(x.model_price))) return null;
+        return { name: x.model_name, category: modelCategory(x.model_name), billing: 'call', price: Number(x.model_price), text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` };
+      }
+      if (x.price_label) return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: Number(x.model_price), text: x.price_label };
+      const ratio = Number(x.model_ratio);
+      if (!Number.isFinite(ratio)) return null;
+      const input = ratio * 1000000 / quotaPerUnit;
+      const output = input * Number(x.completion_ratio || 1);
+      return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio, text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M` };
+    })
+    .filter(Boolean)
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+export function buildPerCallCatalog(modelsResponse, pricingResponse) {
+  return buildModelCatalog(modelsResponse, pricingResponse).filter(x => x.billing === 'call').map(({ billing, ...x }) => x);
 }
 
 export async function refreshModelCatalog(id) {
@@ -151,7 +168,10 @@ export async function refreshModelCatalog(id) {
     if (!Array.isArray(pricing?.data) && !Array.isArray(pricing?.data?.models)) throw new Error('非价格响应');
   }
   catch { pricing = await call(account, '/api/models/pricing', 'GET', auth); }
-  account.models = buildPerCallCatalog(models, pricing);
+  let status = {};
+  try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
+  const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
+  account.models = buildModelCatalog(models, pricing, quotaPerUnit);
   account.modelsCheckedAt = new Date().toISOString();
   writeStore(db);
   return account.models;

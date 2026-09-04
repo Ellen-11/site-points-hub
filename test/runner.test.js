@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPerCallCatalog, classifyCheckin, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -65,4 +65,10 @@ test('supports custom quota-per-call pricing responses', () => {
     { name: 'token-model', priceLabel: '3 额度/1K tokens', priceType: 'token', priceValue: 3, quotaType: 0 }
   ] } };
   assert.deepEqual(buildPerCallCatalog(models, pricing), [{ name: 'gemini-2.5-pro', category: 'Gemini', price: 200, text: '200 额度/次' }]);
+});
+
+test('includes token-priced models in the amount catalog', () => {
+  const models = { data: [{ id: 'gpt-5.4' }] };
+  const pricing = { data: { models: [{ name: 'gpt-5.4', priceLabel: '5 额度/1K tokens', priceType: 'token', priceValue: 5, quotaType: 0 }] } };
+  assert.deepEqual(buildModelCatalog(models, pricing), [{ name: 'gpt-5.4', category: 'GPT', billing: 'token', price: 5, text: '5 额度/1K tokens' }]);
 });

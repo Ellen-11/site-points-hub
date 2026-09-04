@@ -42,7 +42,8 @@
   </form>
 </dialog>
 <dialog id="modelPicker">
-  <div class="model-picker-head"><div><h2 id="modelPickerTitle">选择按次模型</h2><p>先选分类，再从该分类全部按次模型中挑一个。</p></div><button id="closeModels" class="ghost">关闭</button></div>
+  <div class="model-picker-head"><div><h2 id="modelPickerTitle">选择模型</h2><p>先选计费方式和分类，再从全部模型中挑一个。</p></div><button id="closeModels" class="ghost">关闭</button></div>
+  <div id="modelBilling" class="model-categories"><button class="billing-button active" data-billing="call" onclick="setBilling('call')">按次</button><button class="billing-button ghost" data-billing="token" onclick="setBilling('token')">按量</button></div>
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>

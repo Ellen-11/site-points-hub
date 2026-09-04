@@ -50,7 +50,7 @@ app.post('/api/accounts/:id/model', auth, (req, res) => {
   const db = readStore(); const account = db.accounts.find(x => x.id === req.params.id);
   if (!account) return res.status(404).json({ error: '账户不存在' });
   const model = account.models?.find(x => x.name === req.body.model);
-  if (!model) return res.status(400).json({ error: '请从已拉取的按次模型中选择' });
+  if (!model) return res.status(400).json({ error: '请从已拉取的模型中选择' });
   account.modelName = model.name;
   account.modelPrice = { type: 'per_call', text: model.text, model: model.name };
   writeStore(db); res.json({ ok: true, modelName: model.name, modelPrice: account.modelPrice });
