@@ -60,7 +60,8 @@ function render(data) {
   $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
     const account = data.accounts.find(x => x.id === r.accountId);
     const label = r.status === 'already' ? '已签到' : r.status === 'ok' ? '成功' : '失败';
-    return `<div><span>${esc(account?.name || '已删除站点')}</span><span>${r.action === 'checkin' ? '签到' : '轮询'}</span><span class="${r.status}">${label}</span><span>${esc(r.message || new Date(r.startedAt).toLocaleString())}</span></div>`;
+    const actionLabel = r.action === 'checkin' ? '签到' : r.action === 'gateway' ? '网关' : '轮询';
+    return `<div><span>${esc(account?.name || '已删除站点')}</span><span>${actionLabel}</span><span class="${r.status}">${label}</span><span>${esc(r.message || new Date(r.startedAt).toLocaleString())}</span></div>`;
   }).join('') : '<p>暂无运行记录</p>';
 }
 

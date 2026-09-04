@@ -80,3 +80,8 @@ test('batch actions visibly run tagged sites one by one', () => {
   assert.match(source, /const targets = activeFilter/);
   assert.match(source, /当前筛选下没有可执行的站点/);
 });
+
+test('recent runs distinguish gateway traffic', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /r\.action === 'gateway' \? '网关'/);
+});

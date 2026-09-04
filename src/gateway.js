@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
-import { decrypt, readStore } from './store.js';
+import { decrypt, readStore, writeStore } from './store.js';
 import { safeUrl, shouldPoll } from './runner.js';
 
 function authorized(req) {
@@ -22,6 +22,17 @@ export function rewriteGatewayBody(body, account) {
 function candidates() {
   const db = readStore();
   return selectGatewayCandidates(db);
+}
+
+export function recordGatewayRun(account, status, message = '') {
+  const db = readStore();
+  db.runs.unshift({
+    id: crypto.randomUUID(), accountId: account.id, action: 'gateway', status,
+    message: `${account.modelName}${message ? ` · ${message}` : ''}`,
+    startedAt: new Date().toISOString()
+  });
+  db.runs = db.runs.slice(0, 200);
+  writeStore(db);
 }
 
 async function upstreamRequest(account, endpoint, body) {
@@ -71,11 +82,16 @@ export function installGateway(app) {
           const response = await upstreamRequest(account, endpoint, rewriteGatewayBody(req.body, account));
           if (!response.ok) {
             errors.push(`${account.name}: HTTP ${response.status}`);
+            recordGatewayRun(account, 'error', `HTTP ${response.status}，已尝试下一站`);
             await response.arrayBuffer();
             continue;
           }
+          recordGatewayRun(account, 'ok', `HTTP ${response.status}`);
           return forward(response, res);
-        } catch (error) { errors.push(`${account.name}: ${error.message}`); }
+        } catch (error) {
+          errors.push(`${account.name}: ${error.message}`);
+          recordGatewayRun(account, 'error', `${error.message}，已尝试下一站`);
+        }
       }
       res.status(502).json({ error: { message: `All upstreams failed: ${errors.join('; ')}`, type: 'upstream_error' } });
     });
