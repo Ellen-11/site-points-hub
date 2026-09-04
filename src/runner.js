@@ -24,7 +24,12 @@ export function valueAt(obj, dotted) {
 
 async function call(account, endpoint, method, panelType = 'generic') {
   const url = await safeUrl(account.baseUrl, endpoint);
-  const headers = { accept: 'application/json', 'user-agent': 'SitePointsHub/1.0' };
+  const headers = {
+    accept: 'application/json, text/plain, */*',
+    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    referer: `${account.baseUrl}/`,
+    'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36 Edg/136.0.0.0'
+  };
   const token = decrypt(account.credential);
   if (panelType === 'newapi') {
     headers.cookie = token;
@@ -37,7 +42,7 @@ async function call(account, endpoint, method, panelType = 'generic') {
   const response = await fetch(url, { method, headers, redirect: 'error', signal: AbortSignal.timeout(15000) });
   const text = await response.text();
   let data;
-  try { data = JSON.parse(text); } catch { data = { message: /^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) }; }
+  try { data = JSON.parse(text); } catch { throw new Error(/^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`); }
   if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
   return data;
 }
@@ -284,6 +289,7 @@ async function runNewApi(account, action) {
   try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
   const rawBalance = readRemainingQuota(data);
+  if (rawBalance === undefined) throw new Error(data?.message || '余额响应中没有 data.quota');
   const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
   return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, checkin };
 }
