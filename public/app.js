@@ -2,7 +2,7 @@ const $ = s => document.querySelector(s);
 let accounts = [];
 
 async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { 'content-type': 'application/json' }, ...options });
+  const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
   const data = await response.json();
   if (!response.ok) throw Error(data.error || '请求失败');
   return data;
@@ -59,11 +59,15 @@ function render(data) {
 
 $('#loginForm').onsubmit = async event => {
   event.preventDefault();
+  const button = event.submitter || event.target.querySelector('button');
+  button.disabled = true;
+  button.textContent = '正在登录…';
+  $('#loginError').textContent = '';
   try {
     await api('/api/login', { method: 'POST', body: JSON.stringify({ password: new FormData(event.target).get('password') }) });
-    $('#loginError').textContent = '';
-    load();
+    await load();
   } catch (error) { $('#loginError').textContent = error.message; }
+  finally { button.disabled = false; button.textContent = '进入控制台'; }
 };
 
 $('#logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.reload(); };

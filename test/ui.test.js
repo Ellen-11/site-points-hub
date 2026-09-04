@@ -18,3 +18,10 @@ test('expired login hides the stale dashboard', () => {
   assert.match(source, /\$\('#app'\)\.classList\.add\('hidden'\)/);
   assert.match(source, /\$\('#logout'\)\.classList\.add\('hidden'\)/);
 });
+
+test('login explicitly sends cookies and shows progress', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /credentials:\s*'same-origin'/);
+  assert.match(source, /正在登录/);
+  assert.match(source, /await load\(\)/);
+});
