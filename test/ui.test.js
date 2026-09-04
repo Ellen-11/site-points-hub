@@ -36,6 +36,7 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /name="refreshPath"/);
   assert.match(html, /name="refreshCookie"/);
   assert.match(html, /遇到 401/);
+  assert.match(html, /name="pricingCookie"/);
 });
 
 test('site cards include a real model invocation test', () => {

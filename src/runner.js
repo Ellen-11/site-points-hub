@@ -149,6 +149,10 @@ export function pricingAuthType(account) {
   return account.panelType === 'generic' ? 'generic' : 'newapi';
 }
 
+export function pricingRequestAccount(account) {
+  return account.pricingCookie ? { ...account, authType: 'cookie', credential: account.pricingCookie } : account;
+}
+
 export function modelCategory(name) {
   const value = String(name).toLowerCase();
   if (/gemini/.test(value)) return 'Gemini';
@@ -271,9 +275,9 @@ export function buildPerCallCatalog(modelsResponse, pricingResponse) {
 export async function refreshModelCatalog(id) {
   const db = readStore(); const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
-  const auth = pricingAuthType(account);
+  const pricingAccount = pricingRequestAccount(account); const auth = pricingAuthType(pricingAccount);
   const models = await callApiKey(account, '/v1/models');
-  const pricing = await loadModelPricing(account, auth);
+  const pricing = await loadModelPricing(pricingAccount, auth);
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
@@ -307,9 +311,9 @@ export async function refreshModelPrice(id) {
   const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   if (!account.modelName) throw new Error('请先填写模型名称');
-  const pricingAuth = pricingAuthType(account);
+  const pricingAccount = pricingRequestAccount(account); const pricingAuth = pricingAuthType(pricingAccount);
   const [pricing, status] = await Promise.all([
-    loadModelPricing(account, pricingAuth),
+    loadModelPricing(pricingAccount, pricingAuth),
     call(account, '/api/status', 'GET', 'public').catch(() => ({}))
   ]);
   const list = Array.isArray(pricing?.data) ? pricing.data : Array.isArray(pricing) ? pricing : [];

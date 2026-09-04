@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelCategory, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -56,6 +56,14 @@ test('pricing reuses each panel login authentication', () => {
   assert.equal(pricingAuthType({ panelType: 'generic' }), 'generic');
   assert.equal(pricingAuthType({ panelType: 'auto' }), 'newapi');
   assert.equal(pricingAuthType({ panelType: 'newapi' }), 'newapi');
+});
+
+test('pricing can use a dedicated cookie without changing balance auth', () => {
+  const account = { authType: 'bearer', credential: 'bearer-secret', pricingCookie: 'encrypted-cookie' };
+  const pricing = pricingRequestAccount(account);
+  assert.equal(pricing.authType, 'cookie');
+  assert.equal(pricing.credential, 'encrypted-cookie');
+  assert.equal(account.authType, 'bearer');
 });
 
 test('only sites with an enabled tag participate in polling', () => {

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-22">
+  <link rel="stylesheet" href="/style.css?v=20260905-23">
 </head>
 <body>
 <main>
@@ -53,6 +53,8 @@
       <div class="grid"><label>自定义头名称<input name="headerName" placeholder="x-api-key"></label><label>凭据<input name="genericCredential" class="credential" type="password" placeholder="留空则保留原凭据"></label></div>
       <div class="grid"><label>刷新接口<input name="refreshPath" placeholder="/api/user/auth/refresh"></label><label>刷新 Cookie<input name="refreshCookie" class="credential" type="password" placeholder="new_api_refresh=…，留空则保留"></label></div>
       <p class="hint">Bearer 短期失效时使用：遇到 401 会携带刷新 Cookie 调用刷新接口，保存新 Token 和轮换后的 Cookie，再重试一次。</p>
+      <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
+      <p class="hint">当余额使用 Bearer、但浏览器的 pricing 请求只带 Cookie 时填写。不会影响余额与签到认证。</p>
     </div>
     <h2 class="form-section">模型价格</h2>
     <label>API Key<input name="apiKey" type="password" placeholder="sk-…，留空则保留原 Key"></label>
@@ -71,6 +73,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260905-22"></script>
+<script src="/app.js?v=20260905-23"></script>
 </body>
 </html>
