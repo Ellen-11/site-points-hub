@@ -3,26 +3,27 @@ import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
 import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
 import { installGateway } from './gateway.js';
+import { createSession, validSession } from './session.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
 const password = process.env.ADMIN_PASSWORD || 'admin';
-const sessions = new Map();
+const sessionSecret = process.env.APP_SECRET || 'development-only-secret';
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 installGateway(app);
 
 function cookies(req) { return Object.fromEntries((req.headers.cookie || '').split(';').filter(Boolean).map(x => x.trim().split('='))); }
-function auth(req, res, next) { const s = sessions.get(cookies(req).session); if (!s || s < Date.now()) return res.status(401).json({ error: '请先登录' }); next(); }
+function auth(req, res, next) { if (!validSession(cookies(req).session, sessionSecret)) return res.status(401).json({ error: '请先登录' }); next(); }
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.post('/api/login', (req, res) => {
   const a = Buffer.from(String(req.body.password || '')); const b = Buffer.from(password);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: '密码错误' });
-  const token = crypto.randomBytes(24).toString('base64url'); sessions.set(token, Date.now() + 86400000);
+  const token = createSession(sessionSecret);
   res.setHeader('set-cookie', `session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
   res.json({ ok: true });
 });
-app.post('/api/logout', auth, (req, res) => { sessions.delete(cookies(req).session); res.setHeader('set-cookie', 'session=; Path=/; Max-Age=0'); res.json({ ok: true }); });
+app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'session=; Path=/; Max-Age=0'); res.json({ ok: true }); });
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   res.json({ accounts: db.accounts.map(({ credential, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), runs: db.runs.slice(0, 30) });
