@@ -4,6 +4,7 @@ import { encrypt, readStore, writeStore } from './store.js';
 import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll, testModelConnection } from './runner.js';
 import { installGateway } from './gateway.js';
 import { createSession, validSession } from './session.js';
+import { gatewayStatistics } from './stats.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -28,6 +29,10 @@ app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
   res.json({ accounts: db.accounts.map(({ credential, refreshCookie, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30) });
+});
+app.get('/api/stats', auth, (_req, res) => {
+  const db = readStore();
+  res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai'));
 });
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;

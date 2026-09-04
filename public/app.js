@@ -65,6 +65,29 @@ function render(data) {
   }).join('') : '<p>暂无运行记录</p>';
 }
 
+window.showView = view => {
+  $('#dashboardView').classList.toggle('hidden', view !== 'dashboard');
+  $('#statsView').classList.toggle('hidden', view !== 'stats');
+  document.querySelectorAll('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
+  if (view === 'stats') loadStats();
+};
+
+window.loadStats = async () => {
+  try {
+    const data = await api('/api/stats');
+    $('#todayRequests').textContent = data.today.requests.toLocaleString();
+    $('#todaySuccessRate').textContent = `${data.today.successRate}%`;
+    $('#allRequests').textContent = data.all.requests.toLocaleString();
+    $('#switchCount').textContent = data.all.switched.toLocaleString();
+    $('#averageLatency').textContent = data.all.averageLatencyMs === null ? '—' : `${data.all.averageLatencyMs} ms`;
+    const max = Math.max(1, ...data.days.map(day => day.requests));
+    $('#trendChart').innerHTML = data.days.map(day => `<div class="trend-day"><div class="trend-bar"><i style="height:${Math.max(day.requests ? 8 : 2, day.requests / max * 100)}%"></i></div><strong>${day.requests}</strong><span>${esc(day.date.slice(5))}</span></div>`).join('');
+    const rows = list => list.map((row, index) => `<div><b>${index + 1}</b><span><strong>${esc(row.name)}</strong><small>${row.attempts} 次尝试 · 成功 ${row.successful} · 失败 ${row.failed}</small></span><em>${row.averageLatencyMs === null ? '—' : row.averageLatencyMs + ' ms'}</em></div>`).join('') || '<p>还没有网关调用记录。</p>';
+    $('#siteRanking').innerHTML = rows(data.sites);
+    $('#modelRanking').innerHTML = rows(data.models);
+  } catch (error) { alert(`统计加载失败：${error.message}`); }
+};
+
 window.setTagFilter = tag => { activeFilter = tag; render(dashboardData); };
 let draggedAccount = '';
 window.startAccountDrag = (event, id) => { draggedAccount = id; event.dataTransfer.effectAllowed = 'move'; event.currentTarget.classList.add('dragging'); };

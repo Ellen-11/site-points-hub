@@ -24,14 +24,15 @@ function candidates() {
   return selectGatewayCandidates(db);
 }
 
-export function recordGatewayRun(account, status, message = '') {
+export function recordGatewayRun(account, status, message = '', details = {}) {
   const db = readStore();
   db.runs.unshift({
     id: crypto.randomUUID(), accountId: account.id, action: 'gateway', status,
     message: `${account.modelName}${message ? ` · ${message}` : ''}`,
+    modelName: account.modelName, ...details,
     startedAt: new Date().toISOString()
   });
-  db.runs = db.runs.slice(0, 200);
+  db.runs = db.runs.slice(0, 5000);
   writeStore(db);
 }
 
@@ -77,20 +78,22 @@ export function installGateway(app) {
       const routes = candidates();
       if (!routes.length) return res.status(404).json({ error: { message: 'No polling upstream has both an API key and a selected model', type: 'model_not_found' } });
       const errors = [];
-      for (const account of routes) {
+      const requestId = crypto.randomUUID();
+      for (let index = 0; index < routes.length; index += 1) {
+        const account = routes[index]; const started = Date.now();
         try {
           const response = await upstreamRequest(account, endpoint, rewriteGatewayBody(req.body, account));
           if (!response.ok) {
             errors.push(`${account.name}: HTTP ${response.status}`);
-            recordGatewayRun(account, 'error', `HTTP ${response.status}，已尝试下一站`);
+            recordGatewayRun(account, 'error', `HTTP ${response.status}，已尝试下一站`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint });
             await response.arrayBuffer();
             continue;
           }
-          recordGatewayRun(account, 'ok', `HTTP ${response.status}`);
+          recordGatewayRun(account, 'ok', `HTTP ${response.status}`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint });
           return forward(response, res);
         } catch (error) {
           errors.push(`${account.name}: ${error.message}`);
-          recordGatewayRun(account, 'error', `${error.message}，已尝试下一站`);
+          recordGatewayRun(account, 'error', `${error.message}，已尝试下一站`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, endpoint });
         }
       }
       res.status(502).json({ error: { message: `All upstreams failed: ${errors.join('; ')}`, type: 'upstream_error' } });

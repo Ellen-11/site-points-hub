@@ -381,7 +381,7 @@ export async function runAccount(id, action = 'poll') {
     account.lastCheckedAt = new Date().toISOString();
     db.runs.unshift({ id: crypto.randomUUID(), accountId: id, action, status: 'error', message: error.message, startedAt });
   }
-  db.runs = db.runs.slice(0, 200);
+  db.runs = db.runs.slice(0, 5000);
   writeStore(db);
   return account;
 }

@@ -85,3 +85,12 @@ test('recent runs distinguish gateway traffic', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, /r\.action === 'gateway' \? '网关'/);
 });
+
+test('left navigation opens a real gateway statistics module', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, /class="sidebar"/);
+  assert.match(html, />调用统计</);
+  assert.match(html, /id="trendChart"/);
+  assert.match(source, /api\('\/api\/stats'/);
+});
