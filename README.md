@@ -26,7 +26,7 @@ npm start
 
 特殊站点可选择“自定义 JSON API”：填写余额接口与 JSON 字段路径、签到接口，以及 Bearer Token、Cookie 或自定义请求头凭据。例如余额响应为 `{ "data": { "points": 120 } }`，余额字段填 `data.points`。短期 Bearer 还可填写刷新接口和 `new_api_refresh` Cookie；请求遇到 401 时会自动刷新、保存轮换凭据并重试一次。
 
-每个站点可以独立保存 API Key。点击“选择模型”后，应用从 `/v1/models` 和 `/api/pricing`（或自定义面板的 `/api/models/pricing`）拉取该 Key 可用的模型，可在按次和按量计费间切换，再按 GPT、Gemini、Claude、DeepSeek、Qwen、图像、视频和其他分类浏览价格。只有最终手动选中的一个模型会绑定到该站并进入统一网关。
+每个站点可以独立保存 API Key。点击“选择模型”后，应用从 `/v1/models` 拉取可用模型，并依次探测 `/api/pricing`、`/api/models/pricing` 和 `/api/models` 的价格数据；网页回退或不含价格字段的 JSON 会被自动跳过。可在按次和按量计费间切换，再按 GPT、Gemini、Claude、DeepSeek、Qwen、图像、视频和其他分类浏览价格。只有最终手动选中的一个模型会绑定到该站并进入统一网关。
 
 仅接入你拥有或明确获授权的账户。应用只允许生产环境访问 HTTPS 公网地址，并阻止内网地址，避免被用作内网代理。
 

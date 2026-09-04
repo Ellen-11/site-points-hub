@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -9,6 +9,12 @@ test('reads rotated bearer credentials from refresh responses', () => {
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
+});
+
+test('recognizes pricing returned by the panel models endpoint', () => {
+  assert.equal(hasModelPricing({ data: [{ model_name: 'gpt-x', model_ratio: 1 }] }), true);
+  assert.equal(hasModelPricing({ data: [{ id: 'gpt-x', object: 'model' }] }), false);
+  assert.equal(hasModelPricing('<!doctype html>'), false);
 });
 
 test('formats New API quota units', () => {

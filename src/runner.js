@@ -197,7 +197,7 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       price_label: x.priceLabel,
       price_unit: 'quota'
     }))
-    : Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
+    : Array.isArray(pricingResponse?.data) ? pricingResponse.data : Array.isArray(pricingResponse) ? pricingResponse : [];
   return prices
     .filter(x => available.has(x.model_name))
     .map(x => {
@@ -215,6 +215,23 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
     })
     .filter(Boolean)
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+export function hasModelPricing(response) {
+  const list = Array.isArray(response?.data?.models) ? response.data.models : Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+  return list.some(item => item && typeof item === 'object' && (item.model_price !== undefined || item.model_ratio !== undefined || item.quota_type !== undefined || item.priceValue !== undefined || item.priceLabel !== undefined));
+}
+
+async function loadModelPricing(account, auth) {
+  const paths = ['/api/pricing', '/api/models/pricing', '/api/models']; const errors = [];
+  for (const path of paths) {
+    try {
+      const response = await call(account, path, 'GET', auth);
+      if (hasModelPricing(response)) return response;
+      errors.push(`${path}: JSON 中没有价格字段`);
+    } catch (error) { errors.push(`${path}: ${error.message}`); }
+  }
+  throw new Error(`没有找到可用的模型价格接口。已尝试：${errors.join('；')}`);
 }
 
 export function estimateRemainingCalls(balanceRaw, model, quotaPerUnit = 500000) {
@@ -256,12 +273,7 @@ export async function refreshModelCatalog(id) {
   if (!account) throw new Error('账户不存在');
   const auth = pricingAuthType(account);
   const models = await callApiKey(account, '/v1/models');
-  let pricing;
-  try {
-    pricing = await call(account, '/api/pricing', 'GET', auth);
-    if (!Array.isArray(pricing?.data) && !Array.isArray(pricing?.data?.models)) throw new Error('非价格响应');
-  }
-  catch { pricing = await call(account, '/api/models/pricing', 'GET', auth); }
+  const pricing = await loadModelPricing(account, auth);
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
@@ -297,7 +309,7 @@ export async function refreshModelPrice(id) {
   if (!account.modelName) throw new Error('请先填写模型名称');
   const pricingAuth = pricingAuthType(account);
   const [pricing, status] = await Promise.all([
-    call(account, '/api/pricing', 'GET', pricingAuth),
+    loadModelPricing(account, pricingAuth),
     call(account, '/api/status', 'GET', 'public').catch(() => ({}))
   ]);
   const list = Array.isArray(pricing?.data) ? pricing.data : Array.isArray(pricing) ? pricing : [];
