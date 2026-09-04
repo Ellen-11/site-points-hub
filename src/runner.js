@@ -223,6 +223,18 @@ export async function refreshModelCatalog(id) {
   return account.models;
 }
 
+export async function testModelConnection(id) {
+  const db = readStore();
+  const account = db.accounts.find(x => x.id === id);
+  if (!account) throw new Error('账户不存在');
+  if (!account.modelName) throw new Error('请先选择一个模型');
+  const started = Date.now();
+  const models = await callApiKey(account, '/v1/models');
+  const available = (models?.data || []).some(model => model.id === account.modelName);
+  if (!available) throw new Error('API Key 可用，但已选模型不在可用列表中');
+  return { ok: true, model: account.modelName, latencyMs: Date.now() - started };
+}
+
 export async function refreshModelPrice(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);

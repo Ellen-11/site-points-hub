@@ -48,7 +48,7 @@ function render(data) {
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : '<article class="panel"><p>还没有站点，先添加一个。</p></article>';
   $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
     const account = data.accounts.find(x => x.id === r.accountId);
@@ -119,6 +119,15 @@ window.openModels = async id => {
 };
 window.showCategory = showCategory;
 window.chooseModel = async model => { await api(`/api/accounts/${pickingAccount}/model`, { method: 'POST', body: JSON.stringify({ model }) }); $('#modelPicker').close(); load(); };
+window.testModel = async (id, button) => {
+  const original = button.textContent;
+  button.disabled = true; button.textContent = '测试中…';
+  try {
+    const result = await api(`/api/accounts/${id}/model-test`, { method: 'POST' });
+    alert(`模型连接正常：${result.model}\n响应耗时：${result.latencyMs} ms\n本次未生成内容，不消耗模型额度。`);
+  } catch (error) { alert(`模型连接失败：${error.message}`); }
+  finally { button.disabled = false; button.textContent = original; }
+};
 $('#closeModels').onclick = () => $('#modelPicker').close();
 window.togglePoll = async (id, enabled) => { try { await api(`/api/accounts/${id}/polling`, { method: 'POST', body: JSON.stringify({ enabled }) }); } catch (error) { alert(error.message); load(); } };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };

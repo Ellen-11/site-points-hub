@@ -30,3 +30,10 @@ test('dashboard accepts accounts without a selected model price', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, /if \(!price\?\.text\) return ''/);
 });
+
+test('site cards include a non-billable model connection test', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, />测试模型</);
+  assert.match(source, /\/model-test/);
+  assert.match(source, /本次未生成内容/);
+});

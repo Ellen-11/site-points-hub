@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
-import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll } from './runner.js';
+import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll, testModelConnection } from './runner.js';
 import { installGateway } from './gateway.js';
 import { createSession, validSession } from './session.js';
 
@@ -60,6 +60,7 @@ app.post('/api/accounts/:id/model', auth, (req, res) => {
   };
   writeStore(db); res.json({ ok: true, modelName: model.name, modelPrice: account.modelPrice });
 });
+app.post('/api/accounts/:id/model-test', auth, async (req, res) => { try { res.json(await testModelConnection(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/accounts/:id/:action', auth, async (req, res) => { try { res.json(await runAccount(req.params.id, req.params.action)); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/run-all/:action', auth, async (req, res) => { await runAll(req.params.action); res.json({ ok: true }); });
 
