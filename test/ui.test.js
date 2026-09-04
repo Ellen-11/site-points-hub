@@ -64,3 +64,11 @@ test('created tags can be deleted with confirmation', () => {
   assert.match(source, /确定删除标签/);
   assert.match(source, /method: 'DELETE'/);
 });
+
+test('batch actions visibly run tagged sites one by one', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /async function runBatch/);
+  assert.match(source, /for \(let index = 0; index < targets\.length/);
+  assert.match(source, /正在.*\$\{index \+ 1\}\/\$\{targets\.length\}/);
+  assert.match(source, /没有可执行的站点/);
+});

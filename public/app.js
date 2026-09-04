@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
+let accounts = []; let tags = []; let enabledPollTags = []; let dashboardData = null; let activeFilter = '';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -25,6 +25,7 @@ async function load() {
     const data = await api('/api/dashboard');
     accounts = data.accounts;
     tags = data.tags || [];
+    enabledPollTags = data.pollTags || [];
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
     $('#logout').classList.remove('hidden');
@@ -181,6 +182,23 @@ window.deleteTag = async tag => {
   await load();
 };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
-$('#pollAll').onclick = async () => { await api('/api/run-all/poll', { method: 'POST' }); load(); };
-$('#checkinAll').onclick = async () => { await api('/api/run-all/checkin', { method: 'POST' }); load(); };
+async function runBatch(action, button) {
+  const enabled = new Set(enabledPollTags);
+  const targets = accounts.filter(account => (account.tags || []).some(tag => enabled.has(tag)));
+  if (!targets.length) return alert('没有可执行的站点。请先给站点选择标签，并在顶部点亮要轮询的标签。');
+  const original = button.textContent; let ok = 0; let failed = 0; button.disabled = true;
+  try {
+    for (let index = 0; index < targets.length; index += 1) {
+      const account = targets[index];
+      button.textContent = `${index + 1}/${targets.length} ${account.name}`;
+      $('#batchProgress').textContent = `正在${action === 'checkin' ? '签到' : '刷新'} ${index + 1}/${targets.length}：${account.name}`;
+      try { const result = await api(`/api/accounts/${account.id}/${action}`, { method: 'POST' }); result.lastStatus === 'error' ? failed += 1 : ok += 1; }
+      catch { failed += 1; }
+    }
+    $('#batchProgress').textContent = `执行完成：成功 ${ok} 个，失败 ${failed} 个。`;
+    await load();
+  } finally { button.disabled = false; button.textContent = original; }
+}
+$('#pollAll').onclick = event => runBatch('poll', event.currentTarget);
+$('#checkinAll').onclick = event => runBatch('checkin', event.currentTarget);
 load();
