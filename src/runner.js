@@ -127,12 +127,14 @@ export function modelCategory(name) {
   return '其他';
 }
 
-async function callApiKey(account, endpoint) {
+async function callApiKey(account, endpoint, options = {}) {
   if (!account.apiKey) throw new Error('请先填写该站 API Key');
   const url = await safeUrl(account.baseUrl, endpoint);
   const response = await fetch(url, {
-    headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'user-agent': 'SitePointsHub/1.0' },
-    redirect: 'error', signal: AbortSignal.timeout(20000)
+    method: options.method || 'GET',
+    headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'SitePointsHub/1.0' },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    redirect: 'error', signal: AbortSignal.timeout(options.timeoutMs || 20000)
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || data?.message || `模型接口 HTTP ${response.status}`);
@@ -235,10 +237,13 @@ export async function testModelConnection(id) {
   if (!account) throw new Error('账户不存在');
   if (!account.modelName) throw new Error('请先选择一个模型');
   const started = Date.now();
-  const models = await callApiKey(account, '/v1/models');
-  const available = (models?.data || []).some(model => model.id === account.modelName);
-  if (!available) throw new Error('API Key 可用，但已选模型不在可用列表中');
-  return { ok: true, model: account.modelName, latencyMs: Date.now() - started };
+  const result = await callApiKey(account, '/v1/chat/completions', {
+    method: 'POST',
+    body: { model: account.modelName, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, stream: false },
+    timeoutMs: 60000
+  });
+  if (!result?.choices?.length) throw new Error(result?.message || '模型没有返回有效结果');
+  return { ok: true, model: account.modelName, latencyMs: Date.now() - started, usage: result.usage || null };
 }
 
 export async function refreshModelPrice(id) {

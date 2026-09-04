@@ -124,7 +124,7 @@ window.testModel = async (id, button) => {
   button.disabled = true; button.textContent = '测试中…';
   try {
     const result = await api(`/api/accounts/${id}/model-test`, { method: 'POST' });
-    alert(`模型连接正常：${result.model}\n响应耗时：${result.latencyMs} ms\n本次未生成内容，不消耗模型额度。`);
+    alert(`模型调用成功：${result.model}\n响应耗时：${result.latencyMs} ms\n本次已真实调用，会计入上游使用记录并消耗相应额度。`);
   } catch (error) { alert(`模型连接失败：${error.message}`); }
   finally { button.disabled = false; button.textContent = original; }
 };
