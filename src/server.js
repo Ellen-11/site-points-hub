@@ -55,6 +55,14 @@ app.post('/api/accounts/:id/tags', auth, (req, res) => {
   account.tags = [...new Set((Array.isArray(req.body.tags) ? req.body.tags : []).map(x => String(x).trim()).filter(tag => known.has(tag)))];
   writeStore(db); res.json({ ok: true, tags: account.tags });
 });
+app.post('/api/accounts/order', auth, (req, res) => {
+  const db = readStore(); const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds : [];
+  const selected = new Set(orderedIds); const byId = new Map(db.accounts.map(account => [account.id, account]));
+  if (selected.size !== orderedIds.length || orderedIds.some(id => !byId.has(id))) return res.status(400).json({ error: '站点顺序无效' });
+  const ordered = orderedIds.map(id => byId.get(id)); let index = 0;
+  db.accounts = db.accounts.map(account => selected.has(account.id) ? ordered[index++] : account);
+  writeStore(db); res.json({ ok: true });
+});
 app.post('/api/poll-tags', auth, (req, res) => {
   const tag = String(req.body.tag || '').trim();
   if (!tag) return res.status(400).json({ error: '标签不能为空' });

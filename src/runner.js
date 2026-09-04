@@ -355,5 +355,10 @@ export function shouldPoll(account, pollTags = []) {
 export async function runAll(action = 'poll') {
   const db = readStore();
   const ids = db.accounts.filter(account => shouldPoll(account, db.pollTags || [])).map(x => x.id);
-  return Promise.allSettled(ids.map(id => runAccount(id, action)));
+  const results = [];
+  for (const id of ids) {
+    try { results.push({ status: 'fulfilled', value: await runAccount(id, action) }); }
+    catch (reason) { results.push({ status: 'rejected', reason }); }
+  }
+  return results;
 }

@@ -47,3 +47,12 @@ test('polling is controlled by account tags', () => {
   assert.match(source, /togglePollTag/);
   assert.doesNotMatch(source, /参与轮询<\/label>/);
 });
+
+test('tag filter and order controls are available', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /setTagFilter/);
+  assert.match(source, /moveAccount/);
+  assert.match(source, /\/api\/accounts\/order/);
+  assert.match(source, /↑ 上移/);
+  assert.match(source, /↓ 下移/);
+});
