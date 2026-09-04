@@ -41,6 +41,9 @@ export function gatewayStatistics(runs = [], accounts = [], now = new Date(), ti
   const switched = [...requests.values()].filter(items => items.length > 1).length;
   const firstAttemptSuccessful = [...requests.values()].filter(items => items.some(item => item.status === 'ok' && (item.attempt || 1) === 1)).length;
   const successLatencies = events.filter(item => item.status === 'ok' && Number.isFinite(item.latencyMs)).map(item => item.latencyMs);
+  const tokenTotals = events.filter(item => item.status === 'ok').reduce((sum, item) => ({ input: sum.input + (Number(item.inputTokens) || 0), output: sum.output + (Number(item.outputTokens) || 0), cached: sum.cached + (Number(item.cachedTokens) || 0), total: sum.total + (Number(item.totalTokens) || 0), measured: sum.measured + (Number.isFinite(item.totalTokens) || Number.isFinite(item.inputTokens) ? 1 : 0) }), { input: 0, output: 0, cached: 0, total: 0, measured: 0 });
+  const todayEvents = events.filter(item => dayKey(item.startedAt, timeZone) === today && item.status === 'ok');
+  const todayTokens = todayEvents.reduce((sum, item) => ({ input: sum.input + (Number(item.inputTokens) || 0), output: sum.output + (Number(item.outputTokens) || 0), cached: sum.cached + (Number(item.cachedTokens) || 0), total: sum.total + (Number(item.totalTokens) || 0) }), { input: 0, output: 0, cached: 0, total: 0 });
   const sortedLatencies = [...successLatencies].sort((a, b) => a - b);
   const p95LatencyMs = sortedLatencies.length ? sortedLatencies[Math.ceil(sortedLatencies.length * .95) - 1] : null;
   const days = [];
@@ -56,6 +59,6 @@ export function gatewayStatistics(runs = [], accounts = [], now = new Date(), ti
     failures: [...failureMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     endpoints: [...endpointMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     filters: { accounts: accounts.map(account => ({ id: account.id, name: account.name })), models: [...new Set(allEvents.map(event => event.modelName).filter(Boolean))].sort((a, b) => a.localeCompare(b)), accountId: filters.accountId || '', modelName: filters.modelName || '' },
-    updatedAt: now.toISOString()
+    tokens: { today: todayTokens, all: tokenTotals }, updatedAt: now.toISOString()
   };
 }

@@ -88,6 +88,10 @@ window.loadStats = async () => {
     $('#switchCount').textContent = data.all.switched.toLocaleString();
     $('#averageLatency').textContent = data.all.averageLatencyMs === null ? '—' : `${data.all.averageLatencyMs} ms`;
     $('#p95Latency').textContent = data.all.p95LatencyMs === null ? '—' : `${data.all.p95LatencyMs} ms`;
+    $('#inputTokens').textContent = data.tokens.all.input.toLocaleString(); $('#todayInputTokens').textContent = `今日 ${data.tokens.today.input.toLocaleString()}`;
+    $('#outputTokens').textContent = data.tokens.all.output.toLocaleString(); $('#todayOutputTokens').textContent = `今日 ${data.tokens.today.output.toLocaleString()}`;
+    $('#cachedTokens').textContent = data.tokens.all.cached.toLocaleString(); $('#todayCachedTokens').textContent = `今日 ${data.tokens.today.cached.toLocaleString()}`;
+    $('#totalTokens').textContent = data.tokens.all.total.toLocaleString(); $('#measuredRequests').textContent = `${data.tokens.all.measured.toLocaleString()} 次返回用量`;
     $('#trendTitle').textContent = `近 ${range} 天请求`;
     const max = Math.max(1, ...data.days.map(day => day.requests));
     $('#trendChart').innerHTML = data.days.map(day => `<div class="trend-day"><div class="trend-bar"><i style="height:${Math.max(day.requests ? 8 : 2, day.requests / max * 100)}%"></i></div><strong>${day.requests}</strong><span>${esc(day.date.slice(5))}</span></div>`).join('');
@@ -110,7 +114,8 @@ window.loadLogs = async () => {
     $('#logResults').innerHTML = data.runs.map(run => {
       const action = run.action === 'gateway' ? '网关' : run.action === 'checkin' ? '签到' : '轮询';
       const result = run.status === 'ok' ? '成功' : run.status === 'already' ? '已签到' : '失败';
-      const details = [run.modelName, Number.isFinite(run.latencyMs) ? `${run.latencyMs} ms` : '', run.statusCode ? `HTTP ${run.statusCode}` : ''].filter(Boolean).join(' · ');
+      const usage = Number.isFinite(run.totalTokens) ? `输入 ${run.inputTokens || 0} · 输出 ${run.outputTokens || 0} · 缓存 ${run.cachedTokens || 0} · 总计 ${run.totalTokens}` : '';
+      const details = [run.modelName, usage, Number.isFinite(run.latencyMs) ? `${run.latencyMs} ms` : '', run.statusCode ? `HTTP ${run.statusCode}` : ''].filter(Boolean).join(' · ');
       return `<article><time>${new Date(run.startedAt).toLocaleString()}</time><strong>${esc(run.accountName)}</strong><span class="log-kind">${action}</span><span class="${run.status}">${result}</span><p>${esc(details || run.message || '—')}</p></article>`;
     }).join('') || '<p>当前筛选下没有日志。</p>';
   } catch (error) { alert(`日志加载失败：${error.message}`); }

@@ -15,8 +15,42 @@ export function selectGatewayCandidates(db) {
   return db.accounts.filter(account => shouldPoll(account, db.pollTags || []) && account.apiKey && account.modelName);
 }
 
-export function rewriteGatewayBody(body, account) {
-  return { ...body, model: account.modelName };
+export function rewriteGatewayBody(body, account, endpoint = '') {
+  const rewritten = { ...body, model: account.modelName };
+  if (endpoint === '/v1/chat/completions' && body?.stream === true && !body.stream_options) rewritten.stream_options = { include_usage: true };
+  return rewritten;
+}
+
+function normalizedUsage(value) {
+  if (!value || typeof value !== 'object') return null;
+  const inputTokens = Number(value.input_tokens ?? value.prompt_tokens ?? value.promptTokenCount);
+  const outputTokens = Number(value.output_tokens ?? value.completion_tokens ?? value.candidatesTokenCount);
+  const cachedTokens = Number(value.input_tokens_details?.cached_tokens ?? value.prompt_tokens_details?.cached_tokens ?? value.cache_read_input_tokens ?? value.cachedContentTokenCount ?? 0);
+  const totalTokens = Number(value.total_tokens ?? value.totalTokenCount);
+  if (![inputTokens, outputTokens, cachedTokens, totalTokens].some(Number.isFinite)) return null;
+  return { inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0, outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0, cachedTokens: Number.isFinite(cachedTokens) ? cachedTokens : 0, totalTokens: Number.isFinite(totalTokens) ? totalTokens : (Number.isFinite(inputTokens) ? inputTokens : 0) + (Number.isFinite(outputTokens) ? outputTokens : 0) };
+}
+
+function usageIn(value) {
+  if (!value || typeof value !== 'object') return null;
+  for (const key of ['usage', 'usageMetadata']) {
+    const usage = normalizedUsage(value[key]); if (usage) return usage;
+  }
+  for (const child of Object.values(value)) { const usage = usageIn(child); if (usage) return usage; }
+  return null;
+}
+
+export function extractUsage(text = '') {
+  const candidates = [];
+  try { candidates.push(JSON.parse(text)); } catch {}
+  for (const line of String(text).split(/\r?\n/)) {
+    const raw = line.startsWith('data:') ? line.slice(5).trim() : '';
+    if (!raw || raw === '[DONE]') continue;
+    try { candidates.push(JSON.parse(raw)); } catch {}
+  }
+  let found = null;
+  for (const candidate of candidates) found = usageIn(candidate) || found;
+  return found;
 }
 
 function candidates() {
@@ -82,14 +116,15 @@ export function installGateway(app) {
       for (let index = 0; index < routes.length; index += 1) {
         const account = routes[index]; const started = Date.now();
         try {
-          const response = await upstreamRequest(account, endpoint, rewriteGatewayBody(req.body, account));
+          const response = await upstreamRequest(account, endpoint, rewriteGatewayBody(req.body, account, endpoint));
           if (!response.ok) {
             errors.push(`${account.name}: HTTP ${response.status}`);
             recordGatewayRun(account, 'error', `HTTP ${response.status}，已尝试下一站`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint });
             await response.arrayBuffer();
             continue;
           }
-          recordGatewayRun(account, 'ok', `HTTP ${response.status}`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint });
+          const auditResponse = response.clone();
+          auditResponse.text().then(text => recordGatewayRun(account, 'ok', `HTTP ${response.status}`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint, ...extractUsage(text) })).catch(() => recordGatewayRun(account, 'ok', `HTTP ${response.status}`, { requestId, attempt: index + 1, latencyMs: Date.now() - started, statusCode: response.status, endpoint }));
           return forward(response, res);
         } catch (error) {
           errors.push(`${account.name}: ${error.message}`);
