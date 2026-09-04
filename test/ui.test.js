@@ -12,3 +12,9 @@ test('site cards include a safe external link', () => {
   assert.match(source, /class="site-link"/);
   assert.match(source, /rel="noopener noreferrer"/);
 });
+
+test('expired login hides the stale dashboard', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /\$\('#app'\)\.classList\.add\('hidden'\)/);
+  assert.match(source, /\$\('#logout'\)\.classList\.add\('hidden'\)/);
+});

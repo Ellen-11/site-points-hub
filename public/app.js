@@ -28,7 +28,12 @@ async function load() {
     $('#app').classList.remove('hidden');
     $('#logout').classList.remove('hidden');
     render(data);
-  } catch { $('#login').classList.remove('hidden'); }
+  } catch {
+    accounts = [];
+    $('#login').classList.remove('hidden');
+    $('#app').classList.add('hidden');
+    $('#logout').classList.add('hidden');
+  }
 }
 
 function render(data) {
