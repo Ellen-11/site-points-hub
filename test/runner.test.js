@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCheckin, formatNewApiQuota, formatQuota, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { buildPerCallCatalog, classifyCheckin, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -45,4 +45,15 @@ test('only checked sites participate in polling', () => {
   assert.equal(shouldPoll({ enabled: true }), true);
   assert.equal(shouldPoll({ enabled: true, pollEnabled: true }), true);
   assert.equal(shouldPoll({ enabled: true, pollEnabled: false }), false);
+});
+
+test('categorizes and keeps only available per-call models', () => {
+  const models = { data: [{ id: 'gpt-image-1' }, { id: 'gemini-2.5-pro' }, { id: 'token-model' }] };
+  const pricing = { data: [
+    { model_name: 'gpt-image-1', quota_type: 1, model_price: 0.04 },
+    { model_name: 'gemini-2.5-pro', quota_type: 1, model_price: 0.02 },
+    { model_name: 'token-model', quota_type: 0, model_ratio: 1 }
+  ] };
+  assert.deepEqual(buildPerCallCatalog(models, pricing).map(x => [x.name, x.category]), [['gemini-2.5-pro', 'Gemini'], ['gpt-image-1', 'GPT']]);
+  assert.equal(modelCategory('claude-3-opus'), 'Claude');
 });

@@ -99,6 +99,50 @@ export function pricingAuthType(account) {
   return account.panelType === 'generic' ? 'generic' : 'newapi';
 }
 
+export function modelCategory(name) {
+  const value = String(name).toLowerCase();
+  if (/gemini/.test(value)) return 'Gemini';
+  if (/claude/.test(value)) return 'Claude';
+  if (/deepseek/.test(value)) return 'DeepSeek';
+  if (/qwen|qwq/.test(value)) return 'Qwen';
+  if (/gpt|(^|[-_])o[134]([\-_.]|$)/.test(value)) return 'GPT';
+  if (/sora|video|veo/.test(value)) return '视频';
+  if (/image|dall-e|flux|midjourney/.test(value)) return '图像';
+  return '其他';
+}
+
+async function callApiKey(account, endpoint) {
+  if (!account.apiKey) throw new Error('请先填写该站 API Key');
+  const url = await safeUrl(account.baseUrl, endpoint);
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'user-agent': 'SitePointsHub/1.0' },
+    redirect: 'error', signal: AbortSignal.timeout(20000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || data?.message || `模型接口 HTTP ${response.status}`);
+  return data;
+}
+
+export function buildPerCallCatalog(modelsResponse, pricingResponse) {
+  const available = new Set((modelsResponse?.data || []).map(x => x.id));
+  const prices = Array.isArray(pricingResponse?.data) ? pricingResponse.data : [];
+  return prices
+    .filter(x => Number(x.quota_type) === 1 && available.has(x.model_name) && Number.isFinite(Number(x.model_price)))
+    .map(x => ({ name: x.model_name, category: modelCategory(x.model_name), price: Number(x.model_price), text: `$${Number(x.model_price).toFixed(4)} / 次` }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+}
+
+export async function refreshModelCatalog(id) {
+  const db = readStore(); const account = db.accounts.find(x => x.id === id);
+  if (!account) throw new Error('账户不存在');
+  const auth = pricingAuthType(account);
+  const [models, pricing] = await Promise.all([callApiKey(account, '/v1/models'), call(account, '/api/pricing', 'GET', auth)]);
+  account.models = buildPerCallCatalog(models, pricing);
+  account.modelsCheckedAt = new Date().toISOString();
+  writeStore(db);
+  return account.models;
+}
+
 export async function refreshModelPrice(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);

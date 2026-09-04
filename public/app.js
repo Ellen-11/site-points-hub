@@ -33,9 +33,9 @@ function render(data) {
       <label class="poll-toggle"><input type="checkbox" ${a.pollEnabled !== false ? 'checked' : ''} onchange="togglePoll('${a.id}',this.checked)"> 参与轮询</label>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
       <div class="balance">${esc(a.balance ?? '—')}</div>
-      ${a.modelName ? `<div class="model-box"><strong>${esc(a.modelName)}</strong><span>${esc(a.modelPrice?.text || '价格尚未查询')}</span></div>` : ''}
+      <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(a.modelPrice?.text || (a.hasApiKey ? '点击选择模型并查看按次价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button>${a.modelName ? `<button class="ghost" onclick="pricing('${a.id}')">查价格</button>` : ''}<button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : '<article class="panel"><p>还没有站点，先添加一个。</p></article>';
   $('#runs').innerHTML = data.runs.length ? data.runs.map(r => {
     const account = data.accounts.find(x => x.id === r.accountId);
@@ -69,7 +69,30 @@ $('#accountForm').onsubmit = async event => {
 
 window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
-window.pricing = async id => { try { await api(`/api/accounts/${id}/pricing`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
+let pickingAccount = ''; let pickedModels = [];
+function showCategory(category) {
+  document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));
+  const models = pickedModels.filter(model => model.category === category);
+  $('#modelChoices').innerHTML = models.map(model => `<button class="model-choice" data-model="${esc(model.name)}" onclick="chooseModel(this.dataset.model)"><span>${esc(model.name)}</span><strong>${esc(model.text)}</strong></button>`).join('') || '<p>这个分类没有按次模型。</p>';
+}
+window.openModels = async id => {
+  pickingAccount = id;
+  const account = accounts.find(x => x.id === id);
+  if (!account?.hasApiKey) return alert('请先编辑站点并填写 API Key');
+  $('#modelPickerTitle').textContent = `${account.name} · 选择按次模型`;
+  $('#modelCategories').innerHTML = '<p>正在拉取模型和价格…</p>';
+  $('#modelChoices').innerHTML = '';
+  $('#modelPicker').showModal();
+  try {
+    pickedModels = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
+    const categories = [...new Set(pickedModels.map(model => model.category))];
+    $('#modelCategories').innerHTML = categories.map(category => `<button class="category-button ghost" data-category="${esc(category)}" onclick="showCategory('${esc(category)}')">${esc(category)} <small>${pickedModels.filter(model => model.category === category).length}</small></button>`).join('') || '<p>没有找到可用的按次模型。</p>';
+    if (categories.length) showCategory(categories[0]);
+  } catch (error) { $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`; }
+};
+window.showCategory = showCategory;
+window.chooseModel = async model => { await api(`/api/accounts/${pickingAccount}/model`, { method: 'POST', body: JSON.stringify({ model }) }); $('#modelPicker').close(); load(); };
+$('#closeModels').onclick = () => $('#modelPicker').close();
 window.togglePoll = async (id, enabled) => { try { await api(`/api/accounts/${id}/polling`, { method: 'POST', body: JSON.stringify({ enabled }) }); } catch (error) { alert(error.message); load(); } };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 $('#pollAll').onclick = async () => { await api('/api/run-all/poll', { method: 'POST' }); load(); };
