@@ -95,13 +95,18 @@ export function summarizeModelPrice(item, quotaPerUnit = 500000) {
   return { type: 'tokens', text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M`, model: item.model_name };
 }
 
+export function pricingAuthType(account) {
+  return account.panelType === 'generic' ? 'generic' : 'newapi';
+}
+
 export async function refreshModelPrice(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   if (!account.modelName) throw new Error('请先填写模型名称');
+  const pricingAuth = pricingAuthType(account);
   const [pricing, status] = await Promise.all([
-    call(account, '/api/pricing', 'GET', 'public'),
+    call(account, '/api/pricing', 'GET', pricingAuth),
     call(account, '/api/status', 'GET', 'public').catch(() => ({}))
   ]);
   const list = Array.isArray(pricing?.data) ? pricing.data : Array.isArray(pricing) ? pricing : [];

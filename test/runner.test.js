@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCheckin, formatNewApiQuota, formatQuota, readRemainingQuota, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { classifyCheckin, formatNewApiQuota, formatQuota, pricingAuthType, readRemainingQuota, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -33,4 +33,10 @@ test('supports panels that keep remaining credit in total quota', () => {
 test('distinguishes per-call and token model pricing', () => {
   assert.equal(summarizeModelPrice({ model_name: 'image', quota_type: 1, model_price: 0.03 }).text, '$0.0300 / 次');
   assert.equal(summarizeModelPrice({ model_name: 'chat', quota_type: 0, model_ratio: 1.25, completion_ratio: 4 }, 500000).text, '输入 $2.5000 / 1M · 输出 $10.0000 / 1M');
+});
+
+test('pricing reuses each panel login authentication', () => {
+  assert.equal(pricingAuthType({ panelType: 'generic' }), 'generic');
+  assert.equal(pricingAuthType({ panelType: 'auto' }), 'newapi');
+  assert.equal(pricingAuthType({ panelType: 'newapi' }), 'newapi');
 });
