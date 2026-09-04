@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCheckin, formatNewApiQuota, valueAt } from '../src/runner.js';
+import { classifyCheckin, formatNewApiQuota, formatQuota, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -15,4 +15,11 @@ test('classifies check-in business results', () => {
   assert.deepEqual(classifyCheckin({ success: true, message: '签到成功' }), { status: 'ok', message: '签到成功' });
   assert.deepEqual(classifyCheckin({ success: false, message: '今日已签到' }), { status: 'already', message: '今日已签到' });
   assert.throws(() => classifyCheckin({ success: false, message: 'Token 无效' }), /Token 无效/);
+});
+
+test('formats quota using each site currency settings', () => {
+  const config = { data: { quota_per_unit: 500000, quota_display_type: 'CNY', usd_exchange_rate: 7.2 } };
+  assert.equal(formatQuota(1000000, config, 'auto'), '¥14.40');
+  assert.equal(formatQuota(1000000, config, 'usd'), '$2.00');
+  assert.equal(formatQuota(1000000, config, 'raw'), '1,000,000');
 });

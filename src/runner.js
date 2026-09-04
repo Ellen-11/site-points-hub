@@ -29,7 +29,7 @@ async function call(account, endpoint, method, panelType = 'generic') {
   if (panelType === 'newapi') {
     headers.cookie = token;
     headers['new-api-user'] = String(account.userId || '');
-  } else {
+  } else if (panelType !== 'public') {
     if (account.authType === 'bearer') headers.authorization = `Bearer ${token}`;
     if (account.authType === 'cookie') headers.cookie = token;
     if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
@@ -47,6 +47,30 @@ export function formatNewApiQuota(value) {
   return Number.isFinite(amount) ? `$${(amount / 500000).toFixed(2)}` : '—';
 }
 
+function findConfig(data, names) {
+  if (!data || typeof data !== 'object') return undefined;
+  for (const name of names) if (data[name] !== undefined) return data[name];
+  for (const value of Object.values(data)) {
+    const found = findConfig(value, names);
+    if (found !== undefined) return found;
+  }
+}
+
+export function formatQuota(value, config = {}, preference = 'auto') {
+  const quota = Number(value);
+  if (!Number.isFinite(quota)) return '—';
+  const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
+  const configuredType = String(findConfig(config, ['quota_display_type', 'quotaDisplayType', 'QuotaDisplayType']) || 'USD').toUpperCase();
+  const type = preference === 'auto' ? configuredType : String(preference).toUpperCase();
+  if (type === 'TOKENS' || type === 'RAW') return Math.round(quota).toLocaleString('zh-CN');
+  const usd = quota / quotaPerUnit;
+  if (type === 'CNY') {
+    const rate = Number(findConfig(config, ['usd_exchange_rate', 'usdExchangeRate', 'USDExchangeRate'])) || 7.2;
+    return `¥${(usd * rate).toFixed(2)}`;
+  }
+  return `$${usd.toFixed(2)}`;
+}
+
 export function classifyCheckin(data) {
   const message = String(data?.message ?? data?.msg ?? '').trim();
   const already = /已签到|已经签到|重复签到|already\s*(checked|signed)|checked\s*in/i.test(message);
@@ -62,8 +86,10 @@ async function runNewApi(account, action) {
   if (!account.credential) throw new Error('请填写登录 Cookie');
   let checkin;
   if (action === 'checkin') checkin = classifyCheckin(await call(account, '/api/user/checkin', 'POST', 'newapi'));
+  let config = {};
+  try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
-  return { balance: formatNewApiQuota(valueAt(data, 'data.quota')), checkin };
+  return { balance: formatQuota(valueAt(data, 'data.quota'), config, account.currency || 'auto'), checkin };
 }
 
 async function runGeneric(account, action) {
@@ -75,7 +101,9 @@ async function runGeneric(account, action) {
   const data = await call(account, account.balancePath, 'GET');
   const raw = valueAt(data, account.balanceField || 'balance');
   const divisor = Number(account.balanceDivisor || 1);
-  const balance = divisor !== 1 && Number.isFinite(Number(raw)) ? String(Number(raw) / divisor) : String(raw ?? '—');
+  const amount = divisor !== 1 && Number.isFinite(Number(raw)) ? Number(raw) / divisor : raw;
+  const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';
+  const balance = Number.isFinite(Number(amount)) ? `${prefix}${Number(amount).toFixed(2)}` : String(amount ?? '—');
   return { balance, checkin };
 }
 
