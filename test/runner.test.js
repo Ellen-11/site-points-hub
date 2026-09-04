@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCheckin, formatNewApiQuota, formatQuota, readRemainingQuota, valueAt } from '../src/runner.js';
+import { classifyCheckin, formatNewApiQuota, formatQuota, readRemainingQuota, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -28,4 +28,9 @@ test('supports panels that keep remaining credit in total quota', () => {
   assert.equal(readRemainingQuota({ data: { quota: 0, total_quota: 55467567, used_quota: 0 } }), 55467567);
   assert.equal(readRemainingQuota({ data: { quota: 100, total_quota: 1000, used_quota: 400 } }), 100);
   assert.equal(readRemainingQuota({ data: { quota: 0, total_quota: 1000, used_quota: 1000 } }), 0);
+});
+
+test('distinguishes per-call and token model pricing', () => {
+  assert.equal(summarizeModelPrice({ model_name: 'image', quota_type: 1, model_price: 0.03 }).text, '$0.0300 / 次');
+  assert.equal(summarizeModelPrice({ model_name: 'chat', quota_type: 0, model_ratio: 1.25, completion_ratio: 4 }, 500000).text, '输入 $2.5000 / 1M · 输出 $10.0000 / 1M');
 });

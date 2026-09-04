@@ -80,6 +80,39 @@ export function readRemainingQuota(data) {
   return Number.isFinite(quota) ? quota : undefined;
 }
 
+export function summarizeModelPrice(item, quotaPerUnit = 500000) {
+  if (!item) throw new Error('定价列表中找不到这个模型');
+  if (Number(item.quota_type) === 1) {
+    const price = Number(item.model_price);
+    if (!Number.isFinite(price)) throw new Error('该模型没有可用的按次价格');
+    return { type: 'per_call', text: `$${price.toFixed(4)} / 次`, model: item.model_name };
+  }
+  const ratio = Number(item.model_ratio);
+  const completion = Number(item.completion_ratio || 1);
+  if (!Number.isFinite(ratio)) throw new Error('该模型没有可用的 Token 价格');
+  const input = ratio * 1000000 / quotaPerUnit;
+  const output = input * completion;
+  return { type: 'tokens', text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M`, model: item.model_name };
+}
+
+export async function refreshModelPrice(id) {
+  const db = readStore();
+  const account = db.accounts.find(x => x.id === id);
+  if (!account) throw new Error('账户不存在');
+  if (!account.modelName) throw new Error('请先填写模型名称');
+  const [pricing, status] = await Promise.all([
+    call(account, '/api/pricing', 'GET', 'public'),
+    call(account, '/api/status', 'GET', 'public').catch(() => ({}))
+  ]);
+  const list = Array.isArray(pricing?.data) ? pricing.data : Array.isArray(pricing) ? pricing : [];
+  const item = list.find(x => x.model_name === account.modelName);
+  const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
+  account.modelPrice = summarizeModelPrice(item, quotaPerUnit);
+  account.modelPriceCheckedAt = new Date().toISOString();
+  writeStore(db);
+  return account.modelPrice;
+}
+
 export function classifyCheckin(data) {
   const message = String(data?.message ?? data?.msg ?? '').trim();
   const already = /已签到|已经签到|重复签到|already\s*(checked|signed)|checked\s*in/i.test(message);
