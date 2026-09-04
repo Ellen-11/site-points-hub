@@ -80,6 +80,12 @@ export function readRemainingQuota(data) {
   return Number.isFinite(quota) ? quota : undefined;
 }
 
+export function readConfiguredBalance(data, field = 'balance') {
+  const configured = valueAt(data, field);
+  if (configured !== undefined && configured !== null && configured !== '') return configured;
+  return readRemainingQuota(data);
+}
+
 export function summarizeModelPrice(item, quotaPerUnit = 500000) {
   if (!item) throw new Error('定价列表中找不到这个模型');
   if (Number(item.quota_type) === 1) {
@@ -284,7 +290,8 @@ async function runGeneric(account, action) {
     checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
   }
   const data = await call(account, account.balancePath, 'GET');
-  const raw = valueAt(data, account.balanceField || 'balance');
+  const raw = readConfiguredBalance(data, account.balanceField || 'balance');
+  if (raw === undefined) throw new Error(`余额字段 ${account.balanceField || 'balance'} 不存在`);
   const divisor = Number(account.balanceDivisor || 1);
   const amount = divisor !== 1 && Number.isFinite(Number(raw)) ? Number(raw) / divisor : raw;
   const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';

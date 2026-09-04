@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);
@@ -28,6 +28,12 @@ test('supports panels that keep remaining credit in total quota', () => {
   assert.equal(readRemainingQuota({ data: { quota: 0, total_quota: 55467567, used_quota: 0 } }), 55467567);
   assert.equal(readRemainingQuota({ data: { quota: 100, total_quota: 1000, used_quota: 400 } }), 100);
   assert.equal(readRemainingQuota({ data: { quota: 0, total_quota: 1000, used_quota: 1000 } }), 0);
+});
+
+test('falls back to New API quota when a custom balance field misses', () => {
+  const response = { data: { quota: 62500000, used_quota: 0 }, success: true };
+  assert.equal(readConfiguredBalance(response, 'balance'), 62500000);
+  assert.equal(readConfiguredBalance(response, 'data.quota'), 62500000);
 });
 
 test('distinguishes per-call and token model pricing', () => {
