@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260904-16">
+  <link rel="stylesheet" href="/style.css?v=20260905-17">
 </head>
 <body>
 <main>
@@ -35,6 +35,8 @@
       <div class="grid"><label>余额除数<input name="balanceDivisor" value="1" inputmode="decimal"></label><label>签到接口<input name="checkinPath" placeholder="/api/checkin"></label></div>
       <div class="grid"><label>请求方式<select name="checkinMethod"><option>POST</option><option>GET</option></select></label><label>认证方式<select name="authType"><option value="bearer">Bearer Token</option><option value="cookie">Cookie</option><option value="header">自定义请求头</option></select></label></div>
       <div class="grid"><label>自定义头名称<input name="headerName" placeholder="x-api-key"></label><label>凭据<input name="genericCredential" class="credential" type="password" placeholder="留空则保留原凭据"></label></div>
+      <div class="grid"><label>刷新接口<input name="refreshPath" placeholder="/api/user/auth/refresh"></label><label>刷新 Cookie<input name="refreshCookie" class="credential" type="password" placeholder="new_api_refresh=…，留空则保留"></label></div>
+      <p class="hint">Bearer 短期失效时使用：遇到 401 会携带刷新 Cookie 调用刷新接口，保存新 Token 和轮换后的 Cookie，再重试一次。</p>
     </div>
     <h2 class="form-section">模型价格</h2>
     <label>API Key<input name="apiKey" type="password" placeholder="sk-…，留空则保留原 Key"></label>
@@ -53,6 +55,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260904-16"></script>
+<script src="/app.js?v=20260905-17"></script>
 </body>
 </html>

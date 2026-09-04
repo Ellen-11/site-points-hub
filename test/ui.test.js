@@ -31,6 +31,13 @@ test('dashboard accepts accounts without a selected model price', () => {
   assert.match(source, /if \(!price\?\.text\) return ''/);
 });
 
+test('custom bearer accounts can save automatic refresh settings', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /name="refreshPath"/);
+  assert.match(html, /name="refreshCookie"/);
+  assert.match(html, /遇到 401/);
+});
+
 test('site cards include a real model invocation test', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(source, />测试模型</);

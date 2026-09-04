@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, shouldPoll, summarizeModelPrice, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, modelCategory, pricingAuthType, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+
+test('reads rotated bearer credentials from refresh responses', () => {
+  assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
+  assert.equal(refreshCookieFromHeaders(new Headers({ 'set-cookie': 'new_api_refresh=rotated; Path=/api/user/auth; HttpOnly' }), 'old'), 'new_api_refresh=rotated');
+});
 
 test('reads nested balance fields', () => {
   assert.equal(valueAt({ data: { points: 120 } }, 'data.points'), 120);

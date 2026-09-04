@@ -1,6 +1,6 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { decrypt, readStore, writeStore } from './store.js';
+import { decrypt, encrypt, readStore, writeStore } from './store.js';
 
 function privateIp(ip) {
   return ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.') ||
@@ -22,7 +22,43 @@ export function valueAt(obj, dotted) {
   return dotted.split('.').reduce((v, k) => v?.[k], obj);
 }
 
-async function call(account, endpoint, method, panelType = 'generic') {
+export function tokenFromRefresh(data) {
+  if (!data || typeof data !== 'object') return '';
+  for (const key of ['access_token', 'accessToken', 'token']) {
+    if (typeof data[key] === 'string' && data[key]) return data[key].replace(/^Bearer\s+/i, '');
+  }
+  for (const value of Object.values(data)) {
+    const found = tokenFromRefresh(value);
+    if (found) return found;
+  }
+  return '';
+}
+
+export function refreshCookieFromHeaders(headers, fallback = '') {
+  const values = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : [headers.get('set-cookie') || ''];
+  const match = values.join(',').match(/(?:^|[,;]\s*)(new_api_refresh=[^;,\s]+)/i);
+  return match?.[1] || fallback;
+}
+
+async function refreshBearer(account) {
+  if (account.authType !== 'bearer' || !account.refreshPath || !account.refreshCookie) return false;
+  const url = await safeUrl(account.baseUrl, account.refreshPath);
+  const currentCookie = decrypt(account.refreshCookie);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { accept: 'application/json, text/plain, */*', cookie: currentCookie, origin: account.baseUrl, referer: `${account.baseUrl}/` },
+    redirect: 'error', signal: AbortSignal.timeout(15000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.message || `刷新登录失败 (HTTP ${response.status})`);
+  const token = tokenFromRefresh(data) || String(response.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) throw new Error('刷新接口成功，但响应中没有新的 Access Token');
+  account.credential = encrypt(token);
+  account.refreshCookie = encrypt(refreshCookieFromHeaders(response.headers, currentCookie));
+  return true;
+}
+
+async function call(account, endpoint, method, panelType = 'generic', retried = false) {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
     accept: 'application/json, text/plain, */*',
@@ -43,6 +79,9 @@ async function call(account, endpoint, method, panelType = 'generic') {
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error(/^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`); }
+  if (response.status === 401 && !retried && panelType === 'generic' && await refreshBearer(account)) {
+    return call(account, endpoint, method, panelType, true);
+  }
   if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
   return data;
 }
