@@ -32,7 +32,8 @@ app.get('/api/dashboard', auth, (_req, res) => {
 });
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
-  res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai'));
+  const days = Number(_req.query.days) === 30 ? 30 : 7;
+  res.json(gatewayStatistics(db.runs, db.accounts, new Date(), process.env.TZ || 'Asia/Shanghai', days));
 });
 app.get('/api/logs', auth, (req, res) => {
   const db = readStore();

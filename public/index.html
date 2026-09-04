@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-19">
+  <link rel="stylesheet" href="/style.css?v=20260905-20">
 </head>
 <body>
 <main>
@@ -22,9 +22,10 @@
     </div>
     <div id="statsView" class="page-view hidden">
       <section class="stats-title"><div><p class="eyebrow">ACTUAL GATEWAY DATA</p><h2>调用统计</h2><p>只统计真实经过统一网关的请求，不估算金额。</p></div><button class="ghost" onclick="loadStats()">刷新统计</button></section>
-      <section class="stats gateway-summary"><article><span>今日请求</span><strong id="todayRequests">0</strong></article><article><span>今日成功率</span><strong id="todaySuccessRate">0%</strong></article><article><span>累计请求</span><strong id="allRequests">0</strong></article><article><span>自动切换</span><strong id="switchCount">0</strong></article><article><span>平均耗时</span><strong id="averageLatency">—</strong></article></section>
-      <section class="panel stats-panel"><h2>近 7 天请求</h2><div id="trendChart" class="trend-chart"></div></section>
+      <section class="stats gateway-summary"><article><span>今日请求</span><strong id="todayRequests">0</strong></article><article><span>今日成功率</span><strong id="todaySuccessRate">0%</strong></article><article><span>本月请求</span><strong id="monthRequests">0</strong></article><article><span>累计成功 / 失败</span><strong id="allResults">0 / 0</strong></article><article><span>首站命中率</span><strong id="firstHitRate">0%</strong></article><article><span>自动切换</span><strong id="switchCount">0</strong></article><article><span>平均耗时</span><strong id="averageLatency">—</strong></article><article><span>P95 耗时</span><strong id="p95Latency">—</strong></article></section>
+      <section class="panel stats-panel"><div class="panel-heading"><h2 id="trendTitle">近 7 天请求</h2><select id="trendRange" onchange="loadStats()"><option value="7">近 7 天</option><option value="30">近 30 天</option></select></div><div id="trendChart" class="trend-chart"></div></section>
       <section class="ranking-grid"><section class="panel"><h2>站点排行</h2><div id="siteRanking" class="ranking"></div></section><section class="panel"><h2>模型排行</h2><div id="modelRanking" class="ranking"></div></section></section>
+      <section class="ranking-grid"><section class="panel"><h2>失败原因</h2><div id="failureRanking" class="ranking compact-ranking"></div></section><section class="panel"><h2>接口分布</h2><div id="endpointRanking" class="ranking compact-ranking"></div></section></section>
     </div>
     <div id="logsView" class="page-view hidden">
       <section class="stats-title"><div><p class="eyebrow">RUN HISTORY</p><h2>运行日志</h2><p>查看网关、余额轮询和签到的真实执行记录。</p></div><button class="ghost" onclick="loadLogs()">刷新日志</button></section>
@@ -68,6 +69,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260905-19"></script>
+<script src="/app.js?v=20260905-20"></script>
 </body>
 </html>
