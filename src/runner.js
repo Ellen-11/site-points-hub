@@ -101,11 +101,24 @@ function browserAuthHeaders(account, panelType) {
 
 async function recoverAuthentication(account, endpoint, method, panelType, retried) {
   if (retried || panelType === 'public') return null;
-  if (panelType === 'generic' && await refreshBearer(account)) return { retry: true };
-  if (shouldUseBrowserSession(account, panelType, retried)) {
-    const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType));
-    return { data };
+  let refreshError = null;
+  if (panelType === 'generic') {
+    try {
+      if (await refreshBearer(account)) return { retry: true };
+    } catch (error) {
+      refreshError = error;
+    }
   }
+  if (shouldUseBrowserSession(account, panelType, retried)) {
+    try {
+      const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType));
+      return { data };
+    } catch (error) {
+      if (refreshError) throw new Error(`浏览器登录态请求失败：${error.message}；刷新接口：${refreshError.message}`);
+      throw error;
+    }
+  }
+  if (refreshError) throw refreshError;
   return null;
 }
 
