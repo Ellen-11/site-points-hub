@@ -8,6 +8,7 @@ import { createSession, validSession } from './session.js';
 import { gatewayStatistics } from './stats.js';
 import { browserAvailable, openBrowserLogin } from './browser.js';
 import { clearPriceAlerts, dismissPriceAlert, markPriceAlertsRead, priceAlertsView, scanPriceAlerts, setPriceAlertPinned } from './price-alerts.js';
+import { clearInviteAlerts, dismissInviteAlert, inviteAlertsView } from './invite-alerts.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -44,7 +45,7 @@ app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'sess
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
-  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, balanceBody, browserAccessToken, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), hasBalanceBody: Boolean(balanceBody), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
+  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, balanceBody, browserAccessToken, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), hasBalanceBody: Boolean(balanceBody), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount, inviteAlertUnreadCount: inviteAlertsView(db).unreadCount });
 });
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
@@ -73,6 +74,11 @@ app.delete('/api/price-alerts/:id', auth, (req, res) => {
   try { res.json(dismissPriceAlert(req.params.id)); } catch (error) { res.status(404).json({ error: error.message }); }
 });
 app.delete('/api/price-alerts', auth, (_req, res) => res.json(clearPriceAlerts()));
+app.get('/api/invite-alerts', auth, (_req, res) => res.json(inviteAlertsView()));
+app.delete('/api/invite-alerts/:id', auth, (req, res) => {
+  try { res.json(dismissInviteAlert(req.params.id)); } catch (error) { res.status(404).json({ error: error.message }); }
+});
+app.delete('/api/invite-alerts', auth, (_req, res) => res.json(clearInviteAlerts()));
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });

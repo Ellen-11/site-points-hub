@@ -2,6 +2,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
 import { accessTokenInBrowser, refreshInBrowser, requestInBrowser } from './browser.js';
+import { readInviteCount, recordInviteCount } from './invite-alerts.js';
 
 const accountRunQueues = new Map();
 
@@ -547,7 +548,7 @@ async function runNewApi(account, action) {
   if (rawBalance === undefined) throw new Error(data?.message || '余额响应中没有 data.quota');
   const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
   const userGroup = String(valueAt(data, 'data.group') ?? '').trim();
-  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, userGroup, checkin };
+  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, userGroup, inviteCount: readInviteCount(data), checkin };
 }
 
 async function runGeneric(account, action) {
@@ -565,7 +566,7 @@ async function runGeneric(account, action) {
   const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';
   const balance = Number.isFinite(Number(amount)) ? `${prefix}${Number(amount).toFixed(2)}` : String(amount ?? '—');
   const userGroup = String(valueAt(data, 'data.group') ?? valueAt(data, 'user.group') ?? valueAt(data, 'group') ?? '').trim();
-  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, userGroup, checkin };
+  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, userGroup, inviteCount: readInviteCount(data), checkin };
 }
 
 async function runAccountUnlocked(id, action = 'poll') {
@@ -576,6 +577,7 @@ async function runAccountUnlocked(id, action = 'poll') {
   const originalRefreshCookie = account.refreshCookie;
   const originalBrowserAccessToken = account.browserAccessToken;
   const startedAt = new Date().toISOString();
+  let observedInviteCount = null;
   let run;
   try {
     const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
@@ -584,6 +586,10 @@ async function runAccountUnlocked(id, action = 'poll') {
     account.balanceRaw = result.rawBalance;
     account.quotaPerUnit = result.quotaPerUnit || account.quotaPerUnit || 500000;
     if (result.userGroup) account.userGroup = result.userGroup;
+    if (result.inviteCount !== null) {
+      observedInviteCount = result.inviteCount;
+      account.inviteCount = result.inviteCount;
+    }
     if (account.modelPrice?.type === 'per_call') {
       account.modelPrice.estimatedCalls = estimateAccountCalls(account, {
         billing: 'call', price: account.modelPrice.price, priceUnit: account.modelPrice.priceUnit
@@ -608,6 +614,7 @@ async function runAccountUnlocked(id, action = 'poll') {
   return mutateStore(latest => {
     const saved = latest.accounts.find(x => x.id === id);
     if (saved) {
+      if (account.lastStatus === 'ok' && observedInviteCount !== null) recordInviteCount(latest, saved, observedInviteCount, new Date(account.lastCheckedAt));
       for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'userGroup', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt', 'lastCheckinAt', 'lastCheckinStatus', 'lastCheckinMessage']) {
         if (Object.hasOwn(account, field)) saved[field] = account[field];
       }

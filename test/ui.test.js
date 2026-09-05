@@ -171,6 +171,17 @@ test('left navigation includes unread per-call price alerts', () => {
   assert.match(source, /setPriceAlertBadge/);
 });
 
+test('left navigation includes invitation usage alerts', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, />邀请提醒/);
+  assert.match(html, /id="inviteAlertBadge"/);
+  assert.match(html, /id="inviteAlertHistory"/);
+  assert.match(html, /id="inviteSiteFilter"/);
+  assert.match(source, /\/api\/invite-alerts/);
+  assert.match(source, /dismissInviteAlert/);
+});
+
 test('public invite preview exposes only chosen names and links', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const invites = fs.readFileSync(new URL('../public/invites.js', import.meta.url), 'utf8');

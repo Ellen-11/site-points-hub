@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
-let priceAlertData = null;
+let priceAlertData = null; let inviteAlertData = null;
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -27,11 +27,21 @@ function setPriceAlertBadge(count = 0) {
   badge.classList.toggle('hidden', !count);
 }
 
+function setInviteAlertBadge(count = 0) {
+  const badge = $('#inviteAlertBadge');
+  badge.textContent = count > 99 ? '99+' : String(count);
+  badge.classList.toggle('hidden', !count);
+}
+
 async function refreshPriceAlertBadge() {
   if ($('#app').classList.contains('hidden') || !$('#priceAlertsView').classList.contains('hidden')) return;
   try { setPriceAlertBadge((await api('/api/price-alerts')).unreadCount || 0); } catch {}
 }
-setInterval(refreshPriceAlertBadge, 60000);
+async function refreshInviteAlertBadge() {
+  if ($('#app').classList.contains('hidden') || !$('#inviteAlertsView').classList.contains('hidden')) return;
+  try { setInviteAlertBadge((await api('/api/invite-alerts')).unreadCount || 0); } catch {}
+}
+setInterval(() => { refreshPriceAlertBadge(); refreshInviteAlertBadge(); }, 60000);
 
 async function load() {
   try {
@@ -56,6 +66,7 @@ function render(data) {
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
   setPriceAlertBadge(data.priceAlertUnreadCount || 0);
+  setInviteAlertBadge(data.inviteAlertUnreadCount || 0);
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
   $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
@@ -79,10 +90,46 @@ window.showView = view => {
   $('#statsView').classList.toggle('hidden', view !== 'stats');
   $('#logsView').classList.toggle('hidden', view !== 'logs');
   $('#priceAlertsView').classList.toggle('hidden', view !== 'priceAlerts');
+  $('#inviteAlertsView').classList.toggle('hidden', view !== 'inviteAlerts');
   document.querySelectorAll('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
   if (view === 'stats') loadStats();
   if (view === 'logs') loadLogs();
   if (view === 'priceAlerts') loadPriceAlerts();
+  if (view === 'inviteAlerts') loadInviteAlerts();
+};
+
+window.renderInviteAlerts = () => {
+  if (!inviteAlertData) return;
+  const siteSelect = $('#inviteSiteFilter');
+  const selectedSite = siteSelect.value;
+  siteSelect.innerHTML = '<option value="">全部站点</option>' + (inviteAlertData.sites || []).map(site => `<option value="${esc(site.id)}">${esc(site.name)}</option>`).join('');
+  siteSelect.value = selectedSite;
+  const alerts = inviteAlertData.alerts.filter(item => !siteSelect.value || item.accountId === siteSelect.value);
+  $('#inviteMonitoredCount').textContent = inviteAlertData.monitoredCount.toLocaleString();
+  $('#inviteTotalCount').textContent = inviteAlertData.totalCount.toLocaleString();
+  $('#inviteUnreadCount').textContent = inviteAlertData.unreadCount.toLocaleString();
+  $('#inviteAlertsUpdatedAt').textContent = inviteAlertData.lastCheckedAt ? `检测于 ${new Date(inviteAlertData.lastCheckedAt).toLocaleString()}` : '尚未检测到邀请字段';
+  $('#inviteAlertHistory').innerHTML = alerts.map(item => `<article class="unread"><strong>${esc(item.accountName)}</strong><b class="invite-added">+${Number(item.addedCount).toLocaleString()} 人</b><span>邀请人数 ${Number(item.previousCount).toLocaleString()} → ${Number(item.currentCount).toLocaleString()}</span><time>${new Date(item.detectedAt).toLocaleString()}</time><div class="price-alert-actions"><button class="ghost" onclick="dismissInviteAlert('${esc(item.id)}')">已读</button></div></article>`).join('') || '<p>暂无新增邀请提醒。完成一次余额刷新后会开始记录。</p>';
+};
+
+window.loadInviteAlerts = async () => {
+  try {
+    inviteAlertData = await api('/api/invite-alerts');
+    renderInviteAlerts(); setInviteAlertBadge(inviteAlertData.unreadCount || 0);
+  } catch (error) { alert(`邀请提醒加载失败：${error.message}`); }
+};
+
+window.dismissInviteAlert = async id => {
+  try {
+    inviteAlertData = await api(`/api/invite-alerts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    renderInviteAlerts(); setInviteAlertBadge(inviteAlertData.unreadCount || 0);
+  } catch (error) { alert(`已读操作失败：${error.message}`); }
+};
+
+window.clearInviteAlertHistory = async () => {
+  if (!confirm('确定清空全部邀请提醒吗？')) return;
+  inviteAlertData = await api('/api/invite-alerts', { method: 'DELETE' });
+  renderInviteAlerts(); setInviteAlertBadge(0);
 };
 
 function usdPerCall(value) {
