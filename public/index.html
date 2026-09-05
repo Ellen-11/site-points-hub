@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-41">
+  <link rel="stylesheet" href="/style.css?v=20260906-43">
 </head>
 <body>
 <main>
@@ -55,8 +55,10 @@
     <p class="hint">公开页只显示上面的“显示名称”，不会暴露站点地址、余额、凭据、Key 或模型信息。</p>
     <div id="simpleFields"><div class="grid"><label>用户 ID<input name="userId" placeholder="个人中心显示的数字 ID"></label><label>登录 Cookie<input name="credential" class="credential" type="password" placeholder="留空则保留原 Cookie"></label></div><p class="hint">自动使用 Cookie + New-Api-User 请求头，并读取站点货币设置。</p></div>
     <div id="advancedFields" class="hidden">
-      <div class="grid"><label>余额接口<input name="balancePath" placeholder="/api/user"></label><label>余额字段<input name="balanceField" value="balance" placeholder="data.points"></label></div>
-      <div class="grid"><label>余额除数<input name="balanceDivisor" value="1" inputmode="decimal"></label><label>签到接口<input name="checkinPath" placeholder="/api/checkin"></label></div>
+      <div class="grid"><label>余额接口<input name="balancePath" placeholder="/api/user"></label><label>余额请求方式<select name="balanceMethod"><option>GET</option><option>POST</option></select></label></div>
+      <label>余额 JSON 请求体<textarea name="balanceBody" rows="3" placeholder='例如：{"account":"email:xxx@example.com"}；留空则保留原请求体'></textarea></label>
+      <div class="grid"><label>余额字段<input name="balanceField" value="balance" placeholder="data.points"></label><label>余额除数<input name="balanceDivisor" value="1" inputmode="decimal"></label></div>
+      <label>签到接口<input name="checkinPath" placeholder="/api/checkin"></label>
       <div class="grid"><label>请求方式<select name="checkinMethod"><option>POST</option><option>GET</option></select></label><label>认证方式<select name="authType"><option value="bearer">Bearer Token</option><option value="cookie">Cookie</option><option value="header">自定义请求头</option></select></label></div>
       <div class="grid"><label>自定义头名称<input name="headerName" placeholder="x-api-key"></label><label>凭据<input name="genericCredential" class="credential" type="password" placeholder="留空则保留原凭据"></label></div>
       <div class="grid"><label>刷新接口<input name="refreshPath" placeholder="/api/user/auth/refresh"></label><label>刷新 Cookie<input name="refreshCookie" class="credential" type="password" placeholder="new_api_refresh=…，留空则保留"></label></div>
@@ -84,6 +86,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-42"></script>
+<script src="/app.js?v=20260906-43"></script>
 </body>
 </html>

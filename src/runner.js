@@ -100,7 +100,7 @@ function browserAuthHeaders(account, panelType, includeCredential = false) {
   return {};
 }
 
-async function recoverAuthentication(account, endpoint, method, panelType, retried) {
+async function recoverAuthentication(account, endpoint, method, panelType, retried, body = '') {
   if (retried || panelType === 'public') return null;
   let refreshError = null;
   if (panelType === 'generic') {
@@ -113,14 +113,14 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   if (shouldUseBrowserSession(account, panelType, retried)) {
     let browserError;
     try {
-      const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType));
+      const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType), body);
       return { data };
     } catch (error) {
       browserError = error;
     }
     if (panelType === 'generic' && account.credential && ['bearer', 'header'].includes(account.authType)) {
       try {
-        const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true));
+        const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
         return { data };
       } catch (error) {
         browserError = error;
@@ -133,7 +133,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   return null;
 }
 
-async function call(account, endpoint, method, panelType = 'generic', retried = false) {
+async function call(account, endpoint, method, panelType = 'generic', retried = false, body = '') {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
     accept: 'application/json, text/plain, */*',
@@ -150,22 +150,24 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
     if (account.authType === 'cookie') headers.cookie = token;
     if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
   }
-  const response = await fetch(url, { method, headers, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+  const requestBody = !['GET', 'HEAD'].includes(method) && body ? body : undefined;
+  if (requestBody) headers['content-type'] = 'application/json';
+  const response = await fetch(url, { method, headers, body: requestBody, redirect: 'manual', signal: AbortSignal.timeout(15000) });
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch {
     const html = isHtmlResponse(text, response.headers.get('content-type') || '');
     const loginRedirect = response.status >= 300 && response.status < 400;
     if (html || loginRedirect) {
-      const recovered = await recoverAuthentication(account, url.href, method, panelType, retried);
-      if (recovered?.retry) return call(account, endpoint, method, panelType, true);
+      const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody);
+      if (recovered?.retry) return call(account, endpoint, method, panelType, true, body);
       if (recovered && 'data' in recovered) return recovered.data;
     }
     throw new Error(html ? `接口返回网页而不是 JSON (HTTP ${response.status})` : loginRedirect ? `接口重定向到登录页面 (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`);
   }
   if (isExpiredAuthentication(response.status, data)) {
-    const recovered = await recoverAuthentication(account, url.href, method, panelType, retried);
-    if (recovered?.retry) return call(account, endpoint, method, panelType, true);
+    const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody);
+    if (recovered?.retry) return call(account, endpoint, method, panelType, true, body);
     if (recovered && 'data' in recovered) return recovered.data;
   }
   if (!response.ok) {
@@ -421,7 +423,7 @@ async function refreshModelCatalogUnlocked(id) {
   if (!account.userGroup) {
     try {
       const profile = account.panelType === 'generic' && account.balancePath
-        ? await call(account, account.balancePath, 'GET')
+        ? await call(account, account.balancePath, account.balanceMethod || 'GET', 'generic', false, account.balanceBody ? decrypt(account.balanceBody) : '')
         : await call(account, '/api/user/self', 'GET', 'newapi');
       account.userGroup = String(valueAt(profile, 'data.group') ?? valueAt(profile, 'user.group') ?? valueAt(profile, 'group') ?? '').trim();
     } catch {}
@@ -532,7 +534,7 @@ async function runGeneric(account, action) {
     checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
   }
   if (!account.balancePath) throw new Error('尚未配置余额接口；模型与价格功能仍可使用');
-  const data = await call(account, account.balancePath, 'GET');
+  const data = await call(account, account.balancePath, account.balanceMethod || 'GET', 'generic', false, account.balanceBody ? decrypt(account.balanceBody) : '');
   const raw = readConfiguredBalance(data, account.balanceField || 'balance');
   if (raw === undefined) throw new Error(`余额字段 ${account.balanceField || 'balance'} 不存在`);
   const divisor = Number(account.balanceDivisor || 1);

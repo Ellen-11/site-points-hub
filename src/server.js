@@ -44,7 +44,7 @@ app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'sess
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
-  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
+  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, balanceBody, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), hasBalanceBody: Boolean(balanceBody), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
 });
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
@@ -71,9 +71,14 @@ app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });
   const db = readStore(); const old = b.id && db.accounts.find(x => x.id === b.id);
+  let balanceBody = old?.balanceBody || '';
+  if (String(b.balanceBody || '').trim()) {
+    try { JSON.parse(b.balanceBody); } catch { return res.status(400).json({ error: '余额请求体必须是合法 JSON' }); }
+    balanceBody = encrypt(String(b.balanceBody).trim());
+  }
   const tags = b.tags === undefined ? old?.tags || [] : Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(/[,，]/);
   const account = {
-    ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), inviteUrl: b.inviteUrl?.trim() || '', modelBaseUrl: b.modelBaseUrl?.trim().replace(/\/$/, '') || '', panelType: b.panelType || 'auto', currency: b.currency || 'auto', userId: b.userId?.trim() || '', modelName: b.modelName !== undefined ? b.modelName.trim() : old?.modelName || '', tags: [...new Set(tags.map(x => String(x).trim()).filter(Boolean))].slice(0, 10), balancePath: b.balancePath?.trim() || '', balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', refreshPath: b.refreshPath?.trim() || '', refreshMode: b.refreshMode === 'browser' ? 'browser' : 'http', enabled: b.enabled !== false,
+    ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), inviteUrl: b.inviteUrl?.trim() || '', modelBaseUrl: b.modelBaseUrl?.trim().replace(/\/$/, '') || '', panelType: b.panelType || 'auto', currency: b.currency || 'auto', userId: b.userId?.trim() || '', modelName: b.modelName !== undefined ? b.modelName.trim() : old?.modelName || '', tags: [...new Set(tags.map(x => String(x).trim()).filter(Boolean))].slice(0, 10), balancePath: b.balancePath?.trim() || '', balanceMethod: b.balanceMethod === 'POST' ? 'POST' : 'GET', balanceBody, balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', refreshPath: b.refreshPath?.trim() || '', refreshMode: b.refreshMode === 'browser' ? 'browser' : 'http', enabled: b.enabled !== false,
     credential: b.credential ? encrypt(b.credential.replace(/^Bearer\s+/i, '')) : old?.credential || '',
     refreshCookie: b.refreshCookie ? encrypt(b.refreshCookie.replace(/^Cookie:\s*/i, '')) : old?.refreshCookie || '',
     pricingCookie: b.pricingCookie ? encrypt(b.pricingCookie.replace(/^Cookie:\s*/i, '')) : old?.pricingCookie || '',

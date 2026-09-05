@@ -69,7 +69,7 @@ export async function openBrowserLogin(baseUrl) {
   return { ok: true, url };
 }
 
-async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}) {
+async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}, body = '') {
   const target = await cdpTarget(new URL('/', baseUrl).href);
   const client = await connectCdp(target.webSocketDebuggerUrl);
   try {
@@ -79,7 +79,8 @@ async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}) {
     const expression = `(async () => {
       const response = await fetch(${JSON.stringify(endpoint)}, {
         method: ${JSON.stringify(method)}, credentials: 'include', cache: 'no-store',
-        headers: ${JSON.stringify({ accept: 'application/json, text/plain, */*', ...headers })}
+        headers: ${JSON.stringify({ accept: 'application/json, text/plain, */*', ...headers })},
+        body: ${body ? JSON.stringify(body) : 'undefined'}
       });
       return { status: response.status, contentType: response.headers.get('content-type') || '', text: await response.text() };
     })()`;
@@ -109,8 +110,8 @@ export async function refreshInBrowser(baseUrl, refreshPath) {
   return data;
 }
 
-export async function requestInBrowser(baseUrl, endpoint, method = 'GET', headers = {}) {
-  const value = await fetchInBrowser(baseUrl, endpoint, method, headers);
+export async function requestInBrowser(baseUrl, endpoint, method = 'GET', headers = {}, body = '') {
+  const value = await fetchInBrowser(baseUrl, endpoint, method, headers, body);
   let data;
   try {
     data = JSON.parse(value.text);
