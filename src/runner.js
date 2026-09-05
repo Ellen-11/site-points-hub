@@ -1,6 +1,6 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
-import { decrypt, encrypt, readStore, writeStore } from './store.js';
+import { decrypt, encrypt, mutateStore, readStore } from './store.js';
 
 const accountRunQueues = new Map();
 
@@ -332,7 +332,14 @@ async function refreshModelCatalogUnlocked(id) {
     estimatedCalls: estimateAccountCalls(account, model)
   }));
   account.modelsCheckedAt = new Date().toISOString();
-  writeStore(db);
+  mutateStore(latest => {
+    const saved = latest.accounts.find(x => x.id === id);
+    if (!saved) return;
+    saved.quotaPerUnit = account.quotaPerUnit;
+    saved.models = account.models;
+    saved.modelsCheckedAt = account.modelsCheckedAt;
+    saved.modelPricingError = account.modelPricingError;
+  });
   return account.models;
 }
 
@@ -370,7 +377,13 @@ async function refreshModelPriceUnlocked(id) {
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
   account.modelPrice = summarizeModelPrice(item, quotaPerUnit);
   account.modelPriceCheckedAt = new Date().toISOString();
-  writeStore(db);
+  mutateStore(latest => {
+    const saved = latest.accounts.find(x => x.id === id);
+    if (!saved || saved.modelName !== account.modelName) return;
+    saved.modelPrice = account.modelPrice;
+    saved.modelPriceCheckedAt = account.modelPriceCheckedAt;
+    saved.quotaPerUnit = quotaPerUnit;
+  });
   return account.modelPrice;
 }
 
@@ -423,7 +436,10 @@ async function runAccountUnlocked(id, action = 'poll') {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account || !account.enabled) throw new Error('账户不存在或已停用');
+  const originalCredential = account.credential;
+  const originalRefreshCookie = account.refreshCookie;
   const startedAt = new Date().toISOString();
+  let run;
   try {
     const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
     const result = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
@@ -444,16 +460,31 @@ async function runAccountUnlocked(id, action = 'poll') {
       account.lastCheckinStatus = result.checkin.status;
       account.lastCheckinMessage = result.checkin.message;
     }
-    db.runs.unshift({ id: crypto.randomUUID(), accountId: id, action, status: result.checkin?.status || 'ok', message: result.checkin?.message || '', startedAt });
+    run = { id: crypto.randomUUID(), accountId: id, action, status: result.checkin?.status || 'ok', message: result.checkin?.message || '', startedAt };
   } catch (error) {
     account.lastStatus = 'error';
     account.lastError = error.message;
     account.lastCheckedAt = new Date().toISOString();
-    db.runs.unshift({ id: crypto.randomUUID(), accountId: id, action, status: 'error', message: error.message, startedAt });
+    run = { id: crypto.randomUUID(), accountId: id, action, status: 'error', message: error.message, startedAt };
   }
-  db.runs = db.runs.slice(0, 5000);
-  writeStore(db);
-  return account;
+  return mutateStore(latest => {
+    const saved = latest.accounts.find(x => x.id === id);
+    if (saved) {
+      for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt', 'lastCheckinAt', 'lastCheckinStatus', 'lastCheckinMessage']) {
+        if (Object.hasOwn(account, field)) saved[field] = account[field];
+      }
+      if (saved.modelPrice?.type === 'per_call') {
+        saved.modelPrice.estimatedCalls = estimateAccountCalls(saved, {
+          billing: 'call', price: saved.modelPrice.price, priceUnit: saved.modelPrice.priceUnit
+        });
+      }
+      if (account.credential !== originalCredential && saved.credential === originalCredential) saved.credential = account.credential;
+      if (account.refreshCookie !== originalRefreshCookie && saved.refreshCookie === originalRefreshCookie) saved.refreshCookie = account.refreshCookie;
+    }
+    latest.runs.unshift(run);
+    latest.runs = latest.runs.slice(0, 5000);
+    return saved || account;
+  });
 }
 
 export function runAccount(id, action = 'poll') {

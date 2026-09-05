@@ -22,6 +22,13 @@ export function writeStore(data) {
   fs.renameSync(tmp, file);
 }
 
+export function mutateStore(mutator) {
+  const data = readStore();
+  const result = mutator(data);
+  writeStore(data);
+  return result;
+}
+
 export function encrypt(value = '') {
   if (!value) return '';
   const iv = crypto.randomBytes(12);
