@@ -58,6 +58,7 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /GET \/v1\/models/);
   assert.match(html, /name="refreshMode"/);
   assert.match(html, /服务器浏览器/);
+  assert.match(html, /Session\/Cookie/);
   assert.match(source, /\/browser-open/);
 });
 

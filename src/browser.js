@@ -69,7 +69,7 @@ export async function openBrowserLogin(baseUrl) {
   return { ok: true, url };
 }
 
-export async function refreshInBrowser(baseUrl, refreshPath) {
+async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}) {
   const target = await cdpTarget(new URL('/', baseUrl).href);
   const client = await connectCdp(target.webSocketDebuggerUrl);
   try {
@@ -77,22 +77,56 @@ export async function refreshInBrowser(baseUrl, refreshPath) {
     await client.call('Runtime.enable');
     await waitForOrigin(client, origin);
     const expression = `(async () => {
-      const response = await fetch(${JSON.stringify(refreshPath)}, {
-        method: 'POST', credentials: 'include', cache: 'no-store',
-        headers: { accept: 'application/json, text/plain, */*' }
+      const response = await fetch(${JSON.stringify(endpoint)}, {
+        method: ${JSON.stringify(method)}, credentials: 'include', cache: 'no-store',
+        headers: ${JSON.stringify({ accept: 'application/json, text/plain, */*', ...headers })}
       });
-      return { status: response.status, text: await response.text() };
+      return { status: response.status, contentType: response.headers.get('content-type') || '', text: await response.text() };
     })()`;
     const result = await client.call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-    if (result?.exceptionDetails) throw new Error(result.exceptionDetails.text || '浏览器执行刷新失败');
+    if (result?.exceptionDetails) throw new Error(result.exceptionDetails.text || '服务器浏览器请求失败');
     const value = result?.result?.value;
-    if (!value) throw new Error('服务器浏览器没有返回刷新结果');
-    let data;
-    try { data = JSON.parse(value.text); } catch { throw new Error(`刷新接口没有返回 JSON (HTTP ${value.status})`); }
-    if (value.status < 200 || value.status >= 300) throw new Error(`服务器浏览器续期失败：${data?.message || data?.error || `HTTP ${value.status}`} (HTTP ${value.status})`);
-    return data;
+    if (!value) throw new Error('服务器浏览器没有返回请求结果');
+    return value;
   } finally {
     client.close();
     await closeTarget(target.id);
   }
+}
+
+function responseMessage(data) {
+  const message = data?.error?.message || data?.error || data?.message || data?.msg;
+  return typeof message === 'string' ? message : '';
+}
+
+export async function refreshInBrowser(baseUrl, refreshPath) {
+  const value = await fetchInBrowser(baseUrl, refreshPath, 'POST');
+  let data;
+  try { data = JSON.parse(value.text); } catch { throw new Error(`刷新接口没有返回 JSON (HTTP ${value.status})`); }
+  if (value.status < 200 || value.status >= 300) {
+    throw new Error(`服务器浏览器续期失败：${responseMessage(data) || `HTTP ${value.status}`} (HTTP ${value.status})`);
+  }
+  return data;
+}
+
+export async function requestInBrowser(baseUrl, endpoint, method = 'GET', headers = {}) {
+  const value = await fetchInBrowser(baseUrl, endpoint, method, headers);
+  let data;
+  try {
+    data = JSON.parse(value.text);
+  } catch {
+    const html = /text\/html/i.test(value.contentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(String(value.text));
+    throw new Error(html
+      ? `服务器浏览器仍返回登录网页而不是 JSON (HTTP ${value.status})`
+      : value.text.slice(0, 200) || `服务器浏览器接口没有返回 JSON (HTTP ${value.status})`);
+  }
+  if (value.status < 200 || value.status >= 300) {
+    const message = responseMessage(data);
+    throw new Error(message ? `${message} (HTTP ${value.status})` : `HTTP ${value.status}`);
+  }
+  const message = responseMessage(data);
+  if (/unauthorized|invalid\s+(access\s+)?token|not\s+logged\s+in|登录已?失效|未登录|请先登录/i.test(message)) {
+    throw new Error(`${message} (HTTP ${value.status})`);
+  }
+  return data;
 }

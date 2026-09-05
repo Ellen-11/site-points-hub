@@ -1,7 +1,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
-import { refreshInBrowser } from './browser.js';
+import { refreshInBrowser, requestInBrowser } from './browser.js';
 
 const accountRunQueues = new Map();
 
@@ -87,6 +87,28 @@ export function isHtmlResponse(text, contentType = '') {
   return /text\/html/i.test(contentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(String(text));
 }
 
+export function shouldUseBrowserSession(account, panelType = 'generic', retried = false) {
+  return !retried && panelType !== 'public' && account.refreshMode === 'browser';
+}
+
+function browserAuthHeaders(account, panelType) {
+  if (panelType === 'newapi') return { 'new-api-user': String(account.userId || '') };
+  const token = decrypt(account.credential);
+  if (account.authType === 'bearer') return { authorization: `Bearer ${token}` };
+  if (account.authType === 'header') return { [account.headerName || 'authorization']: token };
+  return {};
+}
+
+async function recoverAuthentication(account, endpoint, method, panelType, retried) {
+  if (retried || panelType === 'public') return null;
+  if (panelType === 'generic' && await refreshBearer(account)) return { retry: true };
+  if (shouldUseBrowserSession(account, panelType, retried)) {
+    const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType));
+    return { data };
+  }
+  return null;
+}
+
 async function call(account, endpoint, method, panelType = 'generic', retried = false) {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
@@ -110,13 +132,17 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
   try { data = JSON.parse(text); } catch {
     const html = isHtmlResponse(text, response.headers.get('content-type') || '');
     const loginRedirect = response.status >= 300 && response.status < 400;
-    if ((html || loginRedirect) && !retried && panelType === 'generic' && await refreshBearer(account)) {
-      return call(account, endpoint, method, panelType, true);
+    if (html || loginRedirect) {
+      const recovered = await recoverAuthentication(account, url.href, method, panelType, retried);
+      if (recovered?.retry) return call(account, endpoint, method, panelType, true);
+      if (recovered && 'data' in recovered) return recovered.data;
     }
     throw new Error(html ? `接口返回网页而不是 JSON (HTTP ${response.status})` : loginRedirect ? `接口重定向到登录页面 (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`);
   }
-  if (isExpiredAuthentication(response.status, data) && !retried && panelType === 'generic' && await refreshBearer(account)) {
-    return call(account, endpoint, method, panelType, true);
+  if (isExpiredAuthentication(response.status, data)) {
+    const recovered = await recoverAuthentication(account, url.href, method, panelType, retried);
+    if (recovered?.retry) return call(account, endpoint, method, panelType, true);
+    if (recovered && 'data' in recovered) return recovered.data;
   }
   if (!response.ok) {
     const message = data?.error?.message || data?.error || data?.message || data?.msg;
@@ -169,19 +195,40 @@ export function readConfiguredBalance(data, field = 'balance') {
   return readRemainingQuota(data);
 }
 
-export function summarizeModelPrice(item, quotaPerUnit = 500000) {
+export function pricingGroupRatio(pricingResponse, userGroup = '') {
+  const ratios = pricingResponse?.group_ratio || pricingResponse?.data?.group_ratio;
+  if (!ratios || typeof ratios !== 'object' || Array.isArray(ratios)) return 1;
+  const group = String(userGroup || '').trim();
+  if (group && Object.hasOwn(ratios, group)) {
+    const ratio = Number(ratios[group]);
+    return Number.isFinite(ratio) && ratio >= 0 ? ratio : 1;
+  }
+  const entries = Object.entries(ratios).filter(([, value]) => Number.isFinite(Number(value)) && Number(value) >= 0);
+  if (entries.length === 1) return Number(entries[0][1]);
+  if (Object.hasOwn(ratios, 'default')) {
+    const ratio = Number(ratios.default);
+    if (Number.isFinite(ratio) && ratio >= 0) return ratio;
+  }
+  return 1;
+}
+
+function groupRatioSuffix(groupRatio) {
+  return groupRatio === 1 ? '' : ` · 分组倍率 ${groupRatio}`;
+}
+
+export function summarizeModelPrice(item, quotaPerUnit = 500000, groupRatio = 1) {
   if (!item) throw new Error('定价列表中找不到这个模型');
   if (Number(item.quota_type) === 1) {
-    const price = Number(item.model_price);
+    const price = Number(item.model_price) * groupRatio;
     if (!Number.isFinite(price)) throw new Error('该模型没有可用的按次价格');
-    return { type: 'per_call', text: `$${price.toFixed(4)} / 次`, model: item.model_name };
+    return { type: 'per_call', text: `$${price.toFixed(4)} / 次${groupRatioSuffix(groupRatio)}`, model: item.model_name, price, priceUnit: item.price_unit || 'usd' };
   }
-  const ratio = Number(item.model_ratio);
+  const ratio = Number(item.model_ratio) * groupRatio;
   const completion = Number(item.completion_ratio || 1);
   if (!Number.isFinite(ratio)) throw new Error('该模型没有可用的 Token 价格');
   const input = ratio * 1000000 / quotaPerUnit;
   const output = input * completion;
-  return { type: 'tokens', text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M`, model: item.model_name };
+  return { type: 'tokens', text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M${groupRatioSuffix(groupRatio)}`, model: item.model_name };
 }
 
 export function pricingAuthType(account) {
@@ -235,9 +282,10 @@ async function callApiKey(account, endpoint, options = {}) {
   return data;
 }
 
-export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit = 500000) {
+export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit = 500000, userGroup = '') {
   const available = new Set((modelsResponse?.data || []).map(x => typeof x === 'string' ? x : x.id).filter(Boolean));
   const customPricing = Array.isArray(pricingResponse?.data?.models);
+  const groupRatio = customPricing ? 1 : pricingGroupRatio(pricingResponse, userGroup);
   const prices = customPricing
     ? pricingResponse.data.models.map(x => ({
       model_name: x.name,
@@ -254,14 +302,15 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       const perCall = Number(x.quota_type) === 1 || x.price_type === 'call';
       if (perCall) {
         if (!Number.isFinite(Number(x.model_price))) return null;
-        return { name: x.model_name, category: modelCategory(x.model_name), billing: 'call', price: Number(x.model_price), priceUnit: x.price_unit || 'usd', text: x.price_label || `$${Number(x.model_price).toFixed(4)} / 次` };
+        const price = Number(x.model_price) * groupRatio;
+        return { name: x.model_name, category: modelCategory(x.model_name), billing: 'call', price, priceUnit: x.price_unit || 'usd', text: x.price_label || `$${price.toFixed(4)} / 次${groupRatioSuffix(groupRatio)}` };
       }
-      if (x.price_label) return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: Number(x.model_price), text: x.price_label };
-      const ratio = Number(x.model_ratio);
+      if (x.price_label && customPricing) return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: Number(x.model_price), text: x.price_label };
+      const ratio = Number(x.model_ratio) * groupRatio;
       if (!Number.isFinite(ratio)) return null;
       const input = ratio * 1000000 / quotaPerUnit;
       const output = input * Number(x.completion_ratio || 1);
-      return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio, text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M` };
+      return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio, text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M${groupRatioSuffix(groupRatio)}` };
     })
     .filter(Boolean);
   const pricedNames = new Set(priced.map(model => model.name));
@@ -345,18 +394,34 @@ async function refreshModelCatalogUnlocked(id) {
   if (!models.data?.length) throw new Error(`无法拉取模型：${modelsError || '模型列表和价格列表均为空'}`);
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
+  if (!account.userGroup) {
+    try {
+      const profile = account.panelType === 'generic' && account.balancePath
+        ? await call(account, account.balancePath, 'GET')
+        : await call(account, '/api/user/self', 'GET', 'newapi');
+      account.userGroup = String(valueAt(profile, 'data.group') ?? valueAt(profile, 'user.group') ?? valueAt(profile, 'group') ?? '').trim();
+    } catch {}
+  }
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
   account.quotaPerUnit = quotaPerUnit;
-  account.models = buildModelCatalog(models, pricing, quotaPerUnit).map(model => ({
+  account.models = buildModelCatalog(models, pricing, quotaPerUnit, account.userGroup).map(model => ({
     ...model,
     estimatedCalls: estimateAccountCalls(account, model)
   }));
+  const selected = account.models.find(model => model.name === account.modelName);
+  if (selected) account.modelPrice = {
+    type: selected.billing === 'call' ? 'per_call' : 'tokens', text: selected.text, model: selected.name,
+    price: selected.price, priceUnit: selected.priceUnit,
+    estimatedCalls: estimateAccountCalls(account, selected)
+  };
   account.modelsCheckedAt = new Date().toISOString();
   mutateStore(latest => {
     const saved = latest.accounts.find(x => x.id === id);
     if (!saved) return;
     saved.quotaPerUnit = account.quotaPerUnit;
+    saved.userGroup = account.userGroup;
     saved.models = account.models;
+    if (selected) saved.modelPrice = account.modelPrice;
     saved.modelsCheckedAt = account.modelsCheckedAt;
     saved.modelPricingError = account.modelPricingError;
   });
@@ -395,7 +460,7 @@ async function refreshModelPriceUnlocked(id) {
   const list = Array.isArray(pricing?.data) ? pricing.data : Array.isArray(pricing) ? pricing : [];
   const item = list.find(x => x.model_name === account.modelName);
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
-  account.modelPrice = summarizeModelPrice(item, quotaPerUnit);
+  account.modelPrice = summarizeModelPrice(item, quotaPerUnit, pricingGroupRatio(pricing, account.userGroup));
   account.modelPriceCheckedAt = new Date().toISOString();
   mutateStore(latest => {
     const saved = latest.accounts.find(x => x.id === id);
@@ -423,7 +488,7 @@ export function classifyCheckin(data) {
 
 async function runNewApi(account, action) {
   if (!account.userId) throw new Error('请填写用户 ID');
-  if (!account.credential) throw new Error('请填写登录 Cookie');
+  if (!account.credential && account.refreshMode !== 'browser') throw new Error('请填写登录 Cookie');
   let checkin;
   if (action === 'checkin') checkin = classifyCheckin(await call(account, '/api/user/checkin', 'POST', 'newapi'));
   let config = {};
@@ -432,7 +497,8 @@ async function runNewApi(account, action) {
   const rawBalance = readRemainingQuota(data);
   if (rawBalance === undefined) throw new Error(data?.message || '余额响应中没有 data.quota');
   const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
-  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, checkin };
+  const userGroup = String(valueAt(data, 'data.group') ?? '').trim();
+  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, userGroup, checkin };
 }
 
 async function runGeneric(account, action) {
@@ -449,7 +515,8 @@ async function runGeneric(account, action) {
   const amount = divisor !== 1 && Number.isFinite(Number(raw)) ? Number(raw) / divisor : raw;
   const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';
   const balance = Number.isFinite(Number(amount)) ? `${prefix}${Number(amount).toFixed(2)}` : String(amount ?? '—');
-  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, checkin };
+  const userGroup = String(valueAt(data, 'data.group') ?? valueAt(data, 'user.group') ?? valueAt(data, 'group') ?? '').trim();
+  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, userGroup, checkin };
 }
 
 async function runAccountUnlocked(id, action = 'poll') {
@@ -466,6 +533,7 @@ async function runAccountUnlocked(id, action = 'poll') {
     account.balance = result.balance;
     account.balanceRaw = result.rawBalance;
     account.quotaPerUnit = result.quotaPerUnit || account.quotaPerUnit || 500000;
+    if (result.userGroup) account.userGroup = result.userGroup;
     if (account.modelPrice?.type === 'per_call') {
       account.modelPrice.estimatedCalls = estimateAccountCalls(account, {
         billing: 'call', price: account.modelPrice.price, priceUnit: account.modelPrice.priceUnit
@@ -490,7 +558,7 @@ async function runAccountUnlocked(id, action = 'poll') {
   return mutateStore(latest => {
     const saved = latest.accounts.find(x => x.id === id);
     if (saved) {
-      for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt', 'lastCheckinAt', 'lastCheckinStatus', 'lastCheckinMessage']) {
+      for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'userGroup', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt', 'lastCheckinAt', 'lastCheckinStatus', 'lastCheckinMessage']) {
         if (Object.hasOwn(account, field)) saved[field] = account[field];
       }
       if (saved.modelPrice?.type === 'per_call') {

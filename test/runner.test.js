@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -18,6 +18,15 @@ test('refreshes bearer auth for nonstandard expired-login responses', () => {
 test('recognizes login pages returned with a misleading HTTP 200', () => {
   assert.equal(isHtmlResponse('<!DOCTYPE html><html><body>login</body></html>', 'text/html; charset=utf-8'), true);
   assert.equal(isHtmlResponse('{"success":true}', 'application/json'), false);
+});
+
+test('uses the persistent server browser as a fallback for generic session accounts', () => {
+  assert.equal(shouldUseBrowserSession({ authType: 'cookie', refreshMode: 'browser' }), true);
+  assert.equal(shouldUseBrowserSession({ authType: 'bearer', refreshMode: 'browser' }), true);
+  assert.equal(shouldUseBrowserSession({ authType: 'cookie', refreshMode: 'http' }), false);
+  assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'newapi'), true);
+  assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'public'), false);
+  assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'generic', true), false);
 });
 
 test('serializes concurrent balance and check-in runs for the same account', async () => {
@@ -78,6 +87,22 @@ test('falls back to New API quota when a custom balance field misses', () => {
 test('distinguishes per-call and token model pricing', () => {
   assert.equal(summarizeModelPrice({ model_name: 'image', quota_type: 1, model_price: 0.03 }).text, '$0.0300 / 次');
   assert.equal(summarizeModelPrice({ model_name: 'chat', quota_type: 0, model_ratio: 1.25, completion_ratio: 4 }, 500000).text, '输入 $2.5000 / 1M · 输出 $10.0000 / 1M');
+});
+
+test('applies the current account group ratio to model prices', () => {
+  const models = { data: [{ id: 'gpt-free-call' }, { id: 'gpt-free-token' }] };
+  const pricing = {
+    data: [
+      { model_name: 'gpt-free-call', quota_type: 1, model_price: 0.02 },
+      { model_name: 'gpt-free-token', quota_type: 0, model_ratio: 2, completion_ratio: 4 }
+    ],
+    group_ratio: { default: 1, free: 0 }
+  };
+  assert.equal(pricingGroupRatio(pricing, 'free'), 0);
+  const catalog = buildModelCatalog(models, pricing, 500000, 'free');
+  assert.equal(catalog.find(model => model.name === 'gpt-free-call').price, 0);
+  assert.match(catalog.find(model => model.name === 'gpt-free-call').text, /\$0\.0000 \/ 次 · 分组倍率 0/);
+  assert.match(catalog.find(model => model.name === 'gpt-free-token').text, /输入 \$0\.0000.*分组倍率 0/);
 });
 
 test('pricing reuses each panel login authentication', () => {
