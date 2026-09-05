@@ -47,6 +47,15 @@ test('loads browser login credentials from scoped environment variables', () => 
   assert.deepEqual(browserLoginOptions({ ...account, name: '其他' }, env), { actionText: '', username: '', password: '' });
 });
 
+test('loads separate browser login credentials for multiple sites', () => {
+  const env = { BROWSER_LOGIN_ACCOUNTS_JSON: JSON.stringify({
+    '星期五': { action: 'Sign in', username: 'friday-user', password: 'friday-secret' },
+    'other.example': { action: 'Login', username: 'other-user', password: 'other-secret' }
+  }) };
+  assert.deepEqual(browserLoginOptions({ name: '星期五', baseUrl: 'https://friday.example' }, env), { actionText: 'Sign in', username: 'friday-user', password: 'friday-secret' });
+  assert.deepEqual(browserLoginOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: 'Login', username: 'other-user', password: 'other-secret' });
+});
+
 test('serializes concurrent balance and check-in runs for the same account', async () => {
   const events = []; let releaseFirst;
   const first = serializeAccountRun('same-site', async () => {

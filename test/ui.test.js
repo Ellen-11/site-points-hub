@@ -61,6 +61,7 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /失效后自动点击的登录按钮/);
   assert.match(html, /BROWSER_LOGIN_ACCOUNT/);
   assert.match(html, /BROWSER_LOGIN_PASSWORD/);
+  assert.match(html, /BROWSER_LOGIN_ACCOUNTS_JSON/);
   assert.match(html, /name="balanceMethod"/);
   assert.match(html, /name="balanceBody"/);
   assert.match(html, /服务器浏览器/);

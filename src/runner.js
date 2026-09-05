@@ -93,13 +93,27 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
 }
 
 export function browserLoginOptions(account, env = process.env) {
-  const selector = String(env.BROWSER_LOGIN_ACCOUNT || '').trim().toLowerCase();
   let hostname = '';
   try { hostname = new URL(account.baseUrl).hostname.toLowerCase(); } catch {}
   const identities = [account.id, account.name, account.baseUrl, hostname].map(value => String(value || '').trim().toLowerCase());
+  try {
+    const configured = JSON.parse(String(env.BROWSER_LOGIN_ACCOUNTS_JSON || ''));
+    if (configured && typeof configured === 'object' && !Array.isArray(configured)) {
+      const entry = Object.entries(configured).find(([key]) => identities.includes(String(key).trim().toLowerCase()));
+      if (entry && entry[1] && typeof entry[1] === 'object') {
+        const login = entry[1];
+        return {
+          actionText: String(login.action || login.actionText || account.browserLoginAction || ''),
+          username: String(login.username || ''),
+          password: String(login.password || '')
+        };
+      }
+    }
+  } catch {}
+  const selector = String(env.BROWSER_LOGIN_ACCOUNT || '').trim().toLowerCase();
   const matched = !selector || identities.includes(selector);
   return {
-    actionText: account.browserLoginAction || (matched ? String(env.BROWSER_LOGIN_ACTION || '') : ''),
+    actionText: matched ? String(env.BROWSER_LOGIN_ACTION || account.browserLoginAction || '') : account.browserLoginAction || '',
     username: matched ? String(env.BROWSER_LOGIN_USERNAME || '') : '',
     password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : ''
   };
