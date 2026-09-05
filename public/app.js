@@ -146,22 +146,24 @@ window.renderPriceAlerts = () => {
   siteSelect.innerHTML = '<option value="">全部站点</option>' + (priceAlertData.sites || []).map(site => `<option value="${esc(site.id)}">${esc(site.name)}</option>`).join('');
   siteSelect.value = selectedSite;
   const activeSite = siteSelect.value;
+  const activeScope = $('#priceScopeFilter').value;
   const filter = String($('#priceModelFilter').value || '').trim().toLowerCase();
-  const alerts = priceAlertData.alerts.filter(item => (!activeSite || item.accountId === activeSite || item.currentAccountId === activeSite) && (!filter || `${item.comparisonName || ''} ${item.modelName} ${item.currentModelName || ''}`.toLowerCase().includes(filter)));
-  $('#priceLeaderCount').textContent = priceAlertData.leaders.length.toLocaleString();
+  const alerts = priceAlertData.alerts.filter(item => (!activeSite || item.accountId === activeSite || item.currentAccountId === activeSite) && (!activeScope || (item.scope || 'precise') === activeScope) && (!filter || `${item.comparisonName || ''} ${item.modelName} ${item.currentModelName || ''}`.toLowerCase().includes(filter)));
+  $('#priceLeaderCount').textContent = ((priceAlertData.leaders?.length || 0) + (priceAlertData.broadLeaders?.length || 0)).toLocaleString();
   $('#priceUnreadCount').textContent = priceAlertData.unreadCount.toLocaleString();
   $('#priceSiteCount').textContent = (priceAlertData.lastScan?.monitored || 0).toLocaleString();
   $('#priceFailureCount').textContent = (priceAlertData.lastScan?.failed || 0).toLocaleString();
   $('#priceAlertsUpdatedAt').textContent = priceAlertData.lastCheckedAt ? `扫描于 ${new Date(priceAlertData.lastCheckedAt).toLocaleString()}` : '尚未扫描';
   $('#priceScanHint').textContent = priceAlertData.lastScan
-    ? `本次成功刷新 ${priceAlertData.lastScan.refreshed}/${priceAlertData.lastScan.monitored} 个站点${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。名称前三段（前两个 “-” 连接部分）相同的按次模型归为一组。`
-    : '首次扫描只建立价格基准，不产生提醒。';
+    ? `本次成功刷新 ${priceAlertData.lastScan.refreshed}/${priceAlertData.lastScan.monitored} 个站点${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。一个连接符规则可把 gpt-5.5 与 gpt-5.5-free 归为一组；两个连接符规则继续比较 gemini-3.1-pro-high/low。`
+    : '两套规则首次扫描都只建立价格基准，不产生提醒。';
   $('#priceAlertHistory').innerHTML = alerts.map(item => {
     const watchText = item.pinned
       ? item.watchStatus === 'missing' ? '当前已消失'
         : `${esc(item.watchMessage || '持续观察中')} · 当前 ${esc(usdPerCall(item.currentPriceUsd))}${item.currentModelName ? ` · ${esc(item.currentModelName)}` : ''}${item.currentAccountName ? ` · ${esc(item.currentAccountName)}` : ''}`
       : '';
-    return `<article class="${item.unread ? 'unread ' : ''}${item.pinned ? 'pinned' : ''}"><strong>${item.pinned ? '<i class="pin-mark">加精</i>' : ''}${esc(item.comparisonName || item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>当时最低变体：${esc(item.modelName)}</span><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span>${watchText ? `<p class="watch-state ${esc(item.watchStatus || 'watching')}">${watchText}</p>` : ''}<time>${new Date(item.detectedAt).toLocaleString()}${item.lastChangedAt ? ` · 最近变化 ${new Date(item.lastChangedAt).toLocaleString()}` : ''}</time><div class="price-alert-actions"><button class="ghost" onclick="togglePriceAlertPin('${esc(item.id)}',${!item.pinned})">${item.pinned ? '取消加精' : '加精'}</button><button class="ghost" onclick="dismissPriceAlert('${esc(item.id)}')">已读</button></div></article>`;
+    const scopeLabel = item.scope === 'broad' ? '一个连接符' : '两个连接符';
+    return `<article class="${item.unread ? 'unread ' : ''}${item.pinned ? 'pinned' : ''}"><strong>${item.pinned ? '<i class="pin-mark">加精</i>' : ''}<i class="comparison-mark">${scopeLabel}</i>${esc(item.comparisonName || item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>当时最低变体：${esc(item.modelName)}</span><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span>${watchText ? `<p class="watch-state ${esc(item.watchStatus || 'watching')}">${watchText}</p>` : ''}<time>${new Date(item.detectedAt).toLocaleString()}${item.lastChangedAt ? ` · 最近变化 ${new Date(item.lastChangedAt).toLocaleString()}` : ''}</time><div class="price-alert-actions"><button class="ghost" onclick="togglePriceAlertPin('${esc(item.id)}',${!item.pinned})">${item.pinned ? '取消加精' : '加精'}</button><button class="ghost" onclick="dismissPriceAlert('${esc(item.id)}')">已读</button></div></article>`;
   }).join('') || '<p>暂无降价提醒。</p>';
 };
 

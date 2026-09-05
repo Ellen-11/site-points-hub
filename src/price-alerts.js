@@ -15,6 +15,12 @@ export function comparableModelName(name) {
   return parts.length >= 3 ? parts.slice(0, 3).join('-') : canonical;
 }
 
+export function oneConnectorModelName(name) {
+  const canonical = canonicalModelName(name);
+  const parts = canonical.split('-').filter(Boolean);
+  return parts.length >= 2 ? parts.slice(0, 2).join('-') : canonical;
+}
+
 export function normalizedPerCallPrice(account, model) {
   if (model?.billing !== 'call') return null;
   const price = Number(model.price);
@@ -26,19 +32,27 @@ export function normalizedPerCallPrice(account, model) {
   return !model.priceUnit || model.priceUnit === 'usd' ? price : null;
 }
 
-export function buildPriceLeaders(accounts = []) {
+function buildLeaders(accounts, comparisonName, scope) {
   const leaders = new Map();
   for (const account of accounts) {
     for (const model of account.models || []) {
-      const key = comparableModelName(model.name);
+      const key = comparisonName(model.name);
       const priceUsd = normalizedPerCallPrice(account, model);
       if (!key || priceUsd === null) continue;
-      const candidate = { key, comparisonName: key, modelName: model.name, priceUsd, accountId: account.id, accountName: account.name, checkedAt: account.modelsCheckedAt || null };
+      const candidate = { key, scope, comparisonName: key, modelName: model.name, priceUsd, accountId: account.id, accountName: account.name, checkedAt: account.modelsCheckedAt || null };
       const current = leaders.get(key);
       if (!current || candidate.priceUsd < current.priceUsd || (candidate.priceUsd === current.priceUsd && candidate.accountName.localeCompare(current.accountName) < 0)) leaders.set(key, candidate);
     }
   }
   return [...leaders.values()].sort((a, b) => a.modelName.localeCompare(b.modelName));
+}
+
+export function buildPriceLeaders(accounts = []) {
+  return buildLeaders(accounts, comparableModelName, 'precise');
+}
+
+export function buildOneConnectorPriceLeaders(accounts = []) {
+  return buildLeaders(accounts, oneConnectorModelName, 'broad');
 }
 
 export function buildSitePrices(accounts = []) {
@@ -57,12 +71,13 @@ export function buildSitePrices(accounts = []) {
   return [...prices.values()].sort((a, b) => a.accountName.localeCompare(b.accountName) || a.comparisonName.localeCompare(b.comparisonName));
 }
 
-export function updatePinnedPriceAlerts(alerts = [], leaders = [], now = new Date()) {
-  const currentByFamily = new Map(leaders.map(item => [item.key || comparableModelName(item.modelName), item]));
+export function updatePinnedPriceAlerts(alerts = [], leaders = [], now = new Date(), scope = 'precise') {
+  const comparisonName = scope === 'broad' ? oneConnectorModelName : comparableModelName;
+  const currentByFamily = new Map(leaders.map(item => [item.key || comparisonName(item.modelName), item]));
   const changedAt = now.toISOString();
   for (const alert of alerts) {
-    if (!alert.pinned) continue;
-    const family = alert.comparisonName || comparableModelName(alert.modelName);
+    if (!alert.pinned || (alert.scope || 'precise') !== scope) continue;
+    const family = alert.comparisonName || (scope === 'broad' ? oneConnectorModelName(alert.modelName) : comparableModelName(alert.modelName));
     const current = currentByFamily.get(family);
     const previousPrice = Number(alert.currentPriceUsd ?? alert.newPriceUsd);
     const previousModel = alert.currentModelName || alert.modelName;
@@ -100,31 +115,35 @@ export function updatePinnedPriceAlerts(alerts = [], leaders = [], now = new Dat
   return alerts;
 }
 
-export function updatePriceWatchState(db, leaders, now = new Date()) {
+export function updatePriceWatchState(db, leaders, now = new Date(), scope = 'precise') {
   const previous = db.priceWatch || {};
-  const initialized = previous.initialized === true;
-  const oldLeaders = previous.leaders || {};
+  const broad = scope === 'broad';
+  const initializedField = broad ? 'broadInitialized' : 'initialized';
+  const leadersField = broad ? 'broadLeaders' : 'leaders';
+  const initialized = previous[initializedField] === true;
+  const oldLeaders = previous[leadersField] || {};
   const nextLeaders = Object.fromEntries(leaders.map(item => [item.key, item]));
   const alerts = Array.isArray(previous.alerts) ? previous.alerts : [];
-  updatePinnedPriceAlerts(alerts, leaders, now);
-  const pinnedFamilies = new Set(alerts.filter(alert => alert.pinned).map(alert => alert.comparisonName || comparableModelName(alert.modelName)));
+  const comparisonName = broad ? oneConnectorModelName : comparableModelName;
+  updatePinnedPriceAlerts(alerts, leaders, now, scope);
+  const pinnedFamilies = new Set(alerts.filter(alert => alert.pinned && (alert.scope || 'precise') === scope).map(alert => alert.comparisonName || comparisonName(alert.modelName)));
   const created = [];
   for (const current of leaders) {
     const old = oldLeaders[current.key] || Object.values(oldLeaders)
-      .filter(item => comparableModelName(item.modelName) === current.key)
+      .filter(item => comparisonName(item.modelName) === current.key)
       .sort((a, b) => a.priceUsd - b.priceUsd)[0];
     const isNewModel = initialized && !old;
     const isCheaper = old && current.priceUsd < old.priceUsd - 1e-12;
     if ((!isNewModel && !isCheaper) || pinnedFamilies.has(current.key)) continue;
     created.push({
-      id: crypto.randomUUID(), unread: true, kind: isNewModel ? 'new' : 'drop', comparisonName: current.key, modelName: current.modelName,
+      id: crypto.randomUUID(), unread: true, kind: isNewModel ? 'new' : 'drop', scope, comparisonName: current.key, modelName: current.modelName,
       oldPriceUsd: old?.priceUsd ?? null, newPriceUsd: current.priceUsd,
       oldAccountName: old?.accountName || '', accountId: current.accountId, accountName: current.accountName,
       detectedAt: now.toISOString()
     });
   }
   db.priceWatch = {
-    ...previous, initialized: true, leaders: nextLeaders,
+    ...previous, [initializedField]: true, [leadersField]: nextLeaders,
     alerts: [...created.reverse(), ...alerts].slice(0, MAX_ALERTS),
     lastCheckedAt: now.toISOString()
   };
@@ -147,11 +166,13 @@ export function priceAlertsView(db = readStore()) {
   }
   return {
     leaders: Object.values(watch.leaders || {}).sort((a, b) => a.modelName.localeCompare(b.modelName)),
+    broadLeaders: Object.values(watch.broadLeaders || {}).sort((a, b) => a.modelName.localeCompare(b.modelName)),
     sitePrices,
     sites: [...siteNames].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
     alerts,
     unreadCount: alerts.filter(alert => alert.unread).length,
     initialized: watch.initialized === true,
+    broadInitialized: watch.broadInitialized === true,
     lastCheckedAt: watch.lastCheckedAt || null,
     lastScan: watch.lastScan || null
   };
@@ -169,7 +190,11 @@ async function performPriceScan() {
   const db = readStore();
   const now = new Date();
   const leaders = buildPriceLeaders(db.accounts);
-  const created = updatePriceWatchState(db, leaders, now);
+  const broadLeaders = buildOneConnectorPriceLeaders(db.accounts);
+  const created = [
+    ...updatePriceWatchState(db, leaders, now, 'precise'),
+    ...updatePriceWatchState(db, broadLeaders, now, 'broad')
+  ];
   db.priceWatch.lastScan = { monitored: candidates.length, refreshed, failed: errors.length, errors: errors.slice(0, 30) };
   writeStore(db);
   return { ...priceAlertsView(db), createdCount: created.length };
@@ -202,8 +227,9 @@ export function setPriceAlertPinned(id, pinned = true) {
   alert.pinned = Boolean(pinned);
   if (alert.pinned) {
     const now = new Date().toISOString();
-    const family = alert.comparisonName || comparableModelName(alert.modelName);
-    const current = db.priceWatch?.leaders?.[family];
+    const broad = alert.scope === 'broad';
+    const family = alert.comparisonName || (broad ? oneConnectorModelName(alert.modelName) : comparableModelName(alert.modelName));
+    const current = db.priceWatch?.[broad ? 'broadLeaders' : 'leaders']?.[family];
     alert.pinnedAt = now;
     alert.unread = false;
     alert.lastWatchedAt = now;

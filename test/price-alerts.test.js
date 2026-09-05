@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
+import { buildOneConnectorPriceLeaders, buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, oneConnectorModelName, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
 
 test('price leaders compare only the same exact model name', () => {
   const accounts = [
@@ -25,6 +25,26 @@ test('price leaders group models whose first three hyphen parts match', () => {
   assert.equal(leaders.find(item => item.key === 'gemini-3.1-pro').modelName, 'gemini-3.1-pro-low');
   assert.equal(leaders.find(item => item.key === 'gemini-3.1-pro').accountName, 'B');
   assert.equal(leaders.find(item => item.key === 'gemini-3.0-pro').modelName, 'gemini-3.0-pro-low');
+});
+
+test('one-connector scan compares base and suffixed model names as a separate group', () => {
+  const leaders = buildOneConnectorPriceLeaders([
+    { id: 'a', name: 'A', models: [{ name: 'gpt-5.5', billing: 'call', price: 0.03, priceUnit: 'usd' }] },
+    { id: 'b', name: 'B', models: [{ name: 'gpt-5.5-free', billing: 'call', price: 0.01, priceUnit: 'usd' }] }
+  ]);
+  assert.equal(oneConnectorModelName('gpt-5.5-free'), 'gpt-5.5');
+  assert.equal(leaders.length, 1);
+  assert.equal(leaders[0].scope, 'broad');
+  assert.equal(leaders[0].modelName, 'gpt-5.5-free');
+});
+
+test('one-connector scan initializes independently without flooding alerts', () => {
+  const db = { priceWatch: { initialized: true, leaders: {}, alerts: [] } };
+  const leaders = [{ key: 'gpt-5.5', scope: 'broad', modelName: 'gpt-5.5-free', priceUsd: 0.01, accountId: 'b', accountName: 'B' }];
+  const created = updatePriceWatchState(db, leaders, new Date('2026-09-06T03:00:00Z'), 'broad');
+  assert.equal(created.length, 0);
+  assert.equal(db.priceWatch.broadInitialized, true);
+  assert.ok(db.priceWatch.broadLeaders['gpt-5.5']);
 });
 
 test('migrates exact-name price baselines into comparison groups without a false new-model alert', () => {
