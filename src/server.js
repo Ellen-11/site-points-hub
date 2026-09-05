@@ -7,6 +7,7 @@ import { installGateway } from './gateway.js';
 import { createSession, validSession } from './session.js';
 import { gatewayStatistics } from './stats.js';
 import { browserAvailable, openBrowserLogin } from './browser.js';
+import { clearPriceAlerts, markPriceAlertsRead, priceAlertsView, scanPriceAlerts } from './price-alerts.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -43,7 +44,7 @@ app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'sess
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
-  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30) });
+  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
 });
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();
@@ -60,6 +61,12 @@ app.get('/api/logs', auth, (req, res) => {
   const runs = db.runs.filter(run => (!action || run.action === action) && (!status || run.status === status) && (!accountId || run.accountId === accountId)).slice(0, 500);
   res.json({ runs: runs.map(run => ({ ...run, accountName: accountNames.get(run.accountId) || '已删除站点' })), accounts: db.accounts.map(account => ({ id: account.id, name: account.name })) });
 });
+app.get('/api/price-alerts', auth, (_req, res) => res.json(priceAlertsView()));
+app.post('/api/price-alerts/scan', auth, async (_req, res) => {
+  try { res.json(await scanPriceAlerts()); } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/price-alerts/read', auth, (_req, res) => res.json(markPriceAlertsRead()));
+app.delete('/api/price-alerts', auth, (_req, res) => res.json(clearPriceAlerts()));
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;
   if (!b.name || !b.baseUrl) return res.status(400).json({ error: '名称和站点地址必填' });
@@ -155,6 +162,9 @@ setInterval(async () => {
   const localHour = Number(new Intl.DateTimeFormat('en', { hour: 'numeric', hour12: false, timeZone: process.env.TZ || 'Asia/Shanghai' }).format(now));
   if (localHour === hour && lastCheckinDate !== date) { lastCheckinDate = date; await runAll('checkin'); }
 }, Math.max(1, Number(process.env.POLL_INTERVAL_MINUTES || 30)) * 60000).unref();
+
+setTimeout(() => scanPriceAlerts().catch(error => console.error('[price-alerts]', error.message)), 15000).unref();
+setInterval(() => scanPriceAlerts().catch(error => console.error('[price-alerts]', error.message)), Math.max(5, Number(process.env.PRICE_SCAN_INTERVAL_MINUTES || 30)) * 60000).unref();
 
 const server = app.listen(port, '0.0.0.0', () => console.log(`Site Points Hub listening on ${port}`));
 server.on('upgrade', (req, socket, head) => {

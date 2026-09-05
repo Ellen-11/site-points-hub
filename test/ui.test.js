@@ -153,6 +153,17 @@ test('left navigation includes filterable run logs', () => {
   assert.match(source, /\/api\/logs\?/);
 });
 
+test('left navigation includes unread per-call price alerts', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, />降价提醒/);
+  assert.match(html, /id="priceAlertBadge"/);
+  assert.match(html, /id="priceLeaders"/);
+  assert.match(html, /id="priceAlertHistory"/);
+  assert.match(source, /\/api\/price-alerts\/scan/);
+  assert.match(source, /setPriceAlertBadge/);
+});
+
 test('public invite preview exposes only chosen names and links', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const invites = fs.readFileSync(new URL('../public/invites.js', import.meta.url), 'utf8');

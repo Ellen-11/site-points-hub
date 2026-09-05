@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-36">
+  <link rel="stylesheet" href="/style.css?v=20260905-38">
 </head>
 <body>
 <main>
   <header><div><p class="eyebrow">SITE POINTS HUB</p><h1>站点积分台</h1><p>余额、签到和运行状态，一处看清。</p></div><button id="logout" class="ghost hidden">退出</button></header>
   <section id="login" class="panel login"><h2>管理员登录</h2><form id="loginForm"><input name="password" type="password" placeholder="管理密码" required><button>进入控制台</button></form><p id="loginError" class="error"></p></section>
   <div id="app" class="hidden">
-    <aside class="sidebar"><strong>积分台</strong><button class="nav-button active" data-view="dashboard" onclick="showView('dashboard')">站点面板</button><button class="nav-button" data-view="stats" onclick="showView('stats')">调用统计</button><button class="nav-button" data-view="logs" onclick="showView('logs')">运行日志</button><a class="nav-button public-preview" href="/invites.html" target="_blank" rel="noopener">预览邀请页 ↗</a></aside>
+    <aside class="sidebar"><strong>积分台</strong><button class="nav-button active" data-view="dashboard" onclick="showView('dashboard')">站点面板</button><button class="nav-button" data-view="stats" onclick="showView('stats')">调用统计</button><button class="nav-button" data-view="logs" onclick="showView('logs')">运行日志</button><button class="nav-button alert-nav" data-view="priceAlerts" onclick="showView('priceAlerts')">降价提醒 <span id="priceAlertBadge" class="nav-badge hidden">0</span></button><a class="nav-button public-preview" href="/invites.html" target="_blank" rel="noopener">预览邀请页 ↗</a></aside>
     <div id="dashboardView" class="page-view">
     <section class="stats"><article><span>站点</span><strong id="siteCount">0</strong></article><article><span>正常</span><strong id="okCount">0</strong></article><article><span>待处理</span><strong id="errorCount">0</strong></article></section>
     <section class="poll-tags-panel"><div><h2>轮询标签</h2><p>先添加标签，再给具体站点选择标签；点亮的标签才参与轮询。</p></div><form id="addTagForm" class="add-tag-form"><input name="tag" maxlength="30" placeholder="新标签名称" required><button>＋ 添加标签</button></form><div id="pollTags" class="poll-tags"></div></section>
@@ -33,6 +33,12 @@
       <section class="stats-title"><div><p class="eyebrow">RUN HISTORY</p><h2>运行日志</h2><p>查看网关、余额轮询和签到的真实执行记录。</p></div><button class="ghost" onclick="loadLogs()">刷新日志</button></section>
       <section class="panel log-filters"><label>类型<select id="logAction"><option value="">全部类型</option><option value="gateway">网关</option><option value="poll">轮询</option><option value="checkin">签到</option></select></label><label>结果<select id="logStatus"><option value="">全部结果</option><option value="ok">成功</option><option value="error">失败</option><option value="already">已签到</option></select></label><label>站点<select id="logAccount"><option value="">全部站点</option></select></label></section>
       <section class="panel logs-panel"><div id="logResults" class="log-results"></div></section>
+    </div>
+    <div id="priceAlertsView" class="page-view hidden">
+      <section class="stats-title"><div><p class="eyebrow">PER-CALL PRICE WATCH</p><h2>降价提醒</h2><p>同一个模型在所有站点中单独比较，发现新的最低按次价时提醒。</p></div><div class="refresh-box"><small id="priceAlertsUpdatedAt">尚未扫描</small><button id="scanPrices" onclick="scanPrices()">立即扫描</button></div></section>
+      <section class="stats price-alert-summary"><article><span>监控模型</span><strong id="priceLeaderCount">0</strong></article><article><span>未读提醒</span><strong id="priceUnreadCount">0</strong></article><article><span>监控站点</span><strong id="priceSiteCount">0</strong></article><article><span>本次失败</span><strong id="priceFailureCount">0</strong></article></section>
+      <section class="panel price-filter"><label>筛选模型<input id="priceModelFilter" placeholder="例如 gpt-5.5" oninput="renderPriceAlerts()"></label><p id="priceScanHint">首次扫描只建立价格基准，不产生提醒。</p></section>
+      <section class="ranking-grid price-watch-grid"><section class="panel"><h2>当前最低按次价</h2><div id="priceLeaders" class="price-list"></div></section><section class="panel"><div class="panel-heading"><h2>降价历史</h2><button class="ghost compact-button" onclick="clearPriceAlertHistory()">清空</button></div><div id="priceAlertHistory" class="price-list alerts"></div></section></section>
     </div>
   </div>
 </main>
@@ -78,6 +84,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260905-37"></script>
+<script src="/app.js?v=20260905-38"></script>
 </body>
 </html>

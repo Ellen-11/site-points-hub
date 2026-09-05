@@ -1,5 +1,6 @@
 const $ = s => document.querySelector(s);
 let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
+let priceAlertData = null;
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -19,6 +20,18 @@ function priceWithEstimate(price = {}) {
   if (Number.isInteger(price.estimatedCalls)) return `${price.text} · 预计还可 ${price.estimatedCalls.toLocaleString()} 次`;
   return `${price.text} · 刷新余额后估算`;
 }
+
+function setPriceAlertBadge(count = 0) {
+  const badge = $('#priceAlertBadge');
+  badge.textContent = count > 99 ? '99+' : String(count);
+  badge.classList.toggle('hidden', !count);
+}
+
+async function refreshPriceAlertBadge() {
+  if ($('#app').classList.contains('hidden') || !$('#priceAlertsView').classList.contains('hidden')) return;
+  try { setPriceAlertBadge((await api('/api/price-alerts')).unreadCount || 0); } catch {}
+}
+setInterval(refreshPriceAlertBadge, 60000);
 
 async function load() {
   try {
@@ -42,6 +55,7 @@ function render(data) {
   $('#siteCount').textContent = data.accounts.length;
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
+  setPriceAlertBadge(data.priceAlertUnreadCount || 0);
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
   $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
@@ -64,9 +78,63 @@ window.showView = view => {
   $('#dashboardView').classList.toggle('hidden', view !== 'dashboard');
   $('#statsView').classList.toggle('hidden', view !== 'stats');
   $('#logsView').classList.toggle('hidden', view !== 'logs');
+  $('#priceAlertsView').classList.toggle('hidden', view !== 'priceAlerts');
   document.querySelectorAll('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
   if (view === 'stats') loadStats();
   if (view === 'logs') loadLogs();
+  if (view === 'priceAlerts') loadPriceAlerts();
+};
+
+function usdPerCall(value) {
+  const price = Number(value);
+  if (!Number.isFinite(price)) return '—';
+  if (price === 0) return '$0 / 次';
+  return `$${price < 0.0001 ? price.toFixed(8) : price.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} / 次`;
+}
+
+window.renderPriceAlerts = () => {
+  if (!priceAlertData) return;
+  const filter = String($('#priceModelFilter').value || '').trim().toLowerCase();
+  const leaders = priceAlertData.leaders.filter(item => !filter || item.modelName.toLowerCase().includes(filter));
+  const alerts = priceAlertData.alerts.filter(item => !filter || item.modelName.toLowerCase().includes(filter));
+  $('#priceLeaderCount').textContent = priceAlertData.leaders.length.toLocaleString();
+  $('#priceUnreadCount').textContent = priceAlertData.unreadCount.toLocaleString();
+  $('#priceSiteCount').textContent = (priceAlertData.lastScan?.monitored || 0).toLocaleString();
+  $('#priceFailureCount').textContent = (priceAlertData.lastScan?.failed || 0).toLocaleString();
+  $('#priceAlertsUpdatedAt').textContent = priceAlertData.lastCheckedAt ? `扫描于 ${new Date(priceAlertData.lastCheckedAt).toLocaleString()}` : '尚未扫描';
+  $('#priceScanHint').textContent = priceAlertData.lastScan
+    ? `本次成功刷新 ${priceAlertData.lastScan.refreshed}/${priceAlertData.lastScan.monitored} 个站点${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。只比较名称完全相同的按次模型。`
+    : '首次扫描只建立价格基准，不产生提醒。';
+  $('#priceLeaders').innerHTML = leaders.map(item => `<article><strong>${esc(item.modelName)}</strong><b>${esc(usdPerCall(item.priceUsd))}</b><span>${esc(item.accountName)}</span><span>${item.checkedAt ? new Date(item.checkedAt).toLocaleString() : ''}</span></article>`).join('') || '<p>还没有按次模型价格。请先在站点中拉取一次按次模型。</p>';
+  $('#priceAlertHistory').innerHTML = alerts.map(item => `<article class="${item.unread ? 'unread' : ''}"><strong>${esc(item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span><time>${new Date(item.detectedAt).toLocaleString()}</time></article>`).join('') || '<p>暂无降价提醒。</p>';
+};
+
+window.loadPriceAlerts = async () => {
+  try {
+    priceAlertData = await api('/api/price-alerts');
+    renderPriceAlerts();
+    if (priceAlertData.unreadCount) {
+      await api('/api/price-alerts/read', { method: 'POST' });
+      setPriceAlertBadge(0);
+    }
+  } catch (error) { alert(`降价提醒加载失败：${error.message}`); }
+};
+
+window.scanPrices = async () => {
+  const button = $('#scanPrices'); const original = button.textContent;
+  button.disabled = true; button.textContent = '扫描中…';
+  try {
+    priceAlertData = await api('/api/price-alerts/scan', { method: 'POST' });
+    renderPriceAlerts();
+    setPriceAlertBadge(priceAlertData.unreadCount || 0);
+  } catch (error) { alert(`价格扫描失败：${error.message}`); }
+  finally { button.disabled = false; button.textContent = original; }
+};
+
+window.clearPriceAlertHistory = async () => {
+  if (!confirm('确定清空全部降价提醒吗？当前最低价基准会保留。')) return;
+  priceAlertData = await api('/api/price-alerts', { method: 'DELETE' });
+  renderPriceAlerts(); setPriceAlertBadge(0);
 };
 
 window.loadStats = async () => {
