@@ -155,6 +155,26 @@ async function performLoginAction(target, options = {}) {
       const token = bearerTokenFromHeaders(event?.request?.headers);
       if (token) finish(token);
     });
+    if (options.agree) {
+      const agreementExpression = `(() => {
+        const words = /agree|agreement|terms|privacy|consent|read|同意|协议|隐私|条款/i;
+        const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
+        for (const checkbox of checkboxes) {
+          const label = [...document.querySelectorAll('label')].find(item => item.htmlFor && item.htmlFor === checkbox.id) || checkbox.closest('label');
+          const container = label || checkbox.parentElement;
+          if (!words.test(container?.textContent || '')) continue;
+          if (checkbox.checked) return true;
+          (label || checkbox).click();
+          return true;
+        }
+        const custom = [...document.querySelectorAll('[role="checkbox"]')].find(element => words.test((element.closest('label') || element.parentElement || element).textContent || ''));
+        if (!custom) return false;
+        if (custom.getAttribute('aria-checked') !== 'true') custom.click();
+        return true;
+      })()`;
+      const agreed = await evaluateUntil(client, agreementExpression, 10);
+      if (agreed) await new Promise(resolve => setTimeout(resolve, 500));
+    }
     const clickExpression = `(() => {
       const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
       const expected = ${JSON.stringify(expected)};

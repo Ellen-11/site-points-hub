@@ -43,17 +43,17 @@ test('normalizes configured browser login button text', () => {
 test('loads browser login credentials from scoped environment variables', () => {
   const account = { id: 'a', name: '星期五', baseUrl: 'https://friday.example' };
   const env = { BROWSER_LOGIN_ACCOUNT: '星期五', BROWSER_LOGIN_ACTION: 'Sign in', BROWSER_LOGIN_USERNAME: 'user', BROWSER_LOGIN_PASSWORD: 'secret' };
-  assert.deepEqual(browserLoginOptions(account, env), { actionText: 'Sign in', username: 'user', password: 'secret' });
-  assert.deepEqual(browserLoginOptions({ ...account, name: '其他' }, env), { actionText: '', username: '', password: '' });
+  assert.deepEqual(browserLoginOptions(account, env), { actionText: 'Sign in', username: 'user', password: 'secret', agree: false });
+  assert.deepEqual(browserLoginOptions({ ...account, name: '其他' }, env), { actionText: '', username: '', password: '', agree: false });
 });
 
 test('loads separate browser login credentials for multiple sites', () => {
   const env = { BROWSER_LOGIN_ACCOUNTS_JSON: JSON.stringify({
-    '星期五': { action: 'Sign in', username: 'friday-user', password: 'friday-secret' },
+    '星期五': { action: 'Sign in', username: 'friday-user', password: 'friday-secret', agree: true },
     'other.example': { action: 'Login', username: 'other-user', password: 'other-secret' }
   }) };
-  assert.deepEqual(browserLoginOptions({ name: '星期五', baseUrl: 'https://friday.example' }, env), { actionText: 'Sign in', username: 'friday-user', password: 'friday-secret' });
-  assert.deepEqual(browserLoginOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: 'Login', username: 'other-user', password: 'other-secret' });
+  assert.deepEqual(browserLoginOptions({ name: '星期五', baseUrl: 'https://friday.example' }, env), { actionText: 'Sign in', username: 'friday-user', password: 'friday-secret', agree: true });
+  assert.deepEqual(browserLoginOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: 'Login', username: 'other-user', password: 'other-secret', agree: false });
 });
 
 test('serializes concurrent balance and check-in runs for the same account', async () => {

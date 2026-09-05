@@ -93,6 +93,7 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
 }
 
 export function browserLoginOptions(account, env = process.env) {
+  const enabled = value => value === true || /^(?:1|true|yes|on)$/i.test(String(value || '').trim());
   let hostname = '';
   try { hostname = new URL(account.baseUrl).hostname.toLowerCase(); } catch {}
   const identities = [account.id, account.name, account.baseUrl, hostname].map(value => String(value || '').trim().toLowerCase());
@@ -105,7 +106,8 @@ export function browserLoginOptions(account, env = process.env) {
         return {
           actionText: String(login.action || login.actionText || account.browserLoginAction || ''),
           username: String(login.username || ''),
-          password: String(login.password || '')
+          password: String(login.password || ''),
+          agree: enabled(login.agree)
         };
       }
     }
@@ -115,7 +117,8 @@ export function browserLoginOptions(account, env = process.env) {
   return {
     actionText: matched ? String(env.BROWSER_LOGIN_ACTION || account.browserLoginAction || '') : account.browserLoginAction || '',
     username: matched ? String(env.BROWSER_LOGIN_USERNAME || '') : '',
-    password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : ''
+    password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : '',
+    agree: matched && enabled(env.BROWSER_LOGIN_AGREE)
   };
 }
 
