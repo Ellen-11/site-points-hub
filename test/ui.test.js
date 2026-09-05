@@ -161,10 +161,13 @@ test('left navigation includes unread per-call price alerts', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(html, />降价提醒/);
   assert.match(html, /id="priceAlertBadge"/);
-  assert.match(html, /id="priceLeaders"/);
+  assert.doesNotMatch(html, /id="priceLeaders"/);
   assert.match(html, /id="priceAlertHistory"/);
   assert.match(html, /id="priceSiteFilter"/);
+  assert.match(html, /清除未加精/);
   assert.match(source, /\/api\/price-alerts\/scan/);
+  assert.match(source, /togglePriceAlertPin/);
+  assert.match(source, /dismissPriceAlert/);
   assert.match(source, /setPriceAlertBadge/);
 });
 

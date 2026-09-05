@@ -100,11 +100,7 @@ window.renderPriceAlerts = () => {
   siteSelect.value = selectedSite;
   const activeSite = siteSelect.value;
   const filter = String($('#priceModelFilter').value || '').trim().toLowerCase();
-  const priceSource = activeSite ? (priceAlertData.sitePrices || []).filter(item => item.accountId === activeSite) : priceAlertData.leaders;
-  const leaders = priceSource.filter(item => !filter || `${item.comparisonName || item.key || ''} ${item.modelName}`.toLowerCase().includes(filter));
-  const alerts = priceAlertData.alerts.filter(item => (!activeSite || item.accountId === activeSite) && (!filter || `${item.comparisonName || ''} ${item.modelName}`.toLowerCase().includes(filter)));
-  const siteName = (priceAlertData.sites || []).find(site => site.id === activeSite)?.name;
-  $('#priceListTitle').textContent = siteName ? `${siteName} · 按次价格` : '全部站点 · 当前最低按次价';
+  const alerts = priceAlertData.alerts.filter(item => (!activeSite || item.accountId === activeSite || item.currentAccountId === activeSite) && (!filter || `${item.comparisonName || ''} ${item.modelName} ${item.currentModelName || ''}`.toLowerCase().includes(filter)));
   $('#priceLeaderCount').textContent = priceAlertData.leaders.length.toLocaleString();
   $('#priceUnreadCount').textContent = priceAlertData.unreadCount.toLocaleString();
   $('#priceSiteCount').textContent = (priceAlertData.lastScan?.monitored || 0).toLocaleString();
@@ -113,18 +109,20 @@ window.renderPriceAlerts = () => {
   $('#priceScanHint').textContent = priceAlertData.lastScan
     ? `本次成功刷新 ${priceAlertData.lastScan.refreshed}/${priceAlertData.lastScan.monitored} 个站点${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。名称前三段（前两个 “-” 连接部分）相同的按次模型归为一组。`
     : '首次扫描只建立价格基准，不产生提醒。';
-  $('#priceLeaders').innerHTML = leaders.map(item => `<article><strong>${esc(item.comparisonName || item.key || item.modelName)}</strong><b>${esc(usdPerCall(item.priceUsd))}</b><span>最低变体：${esc(item.modelName)}</span><span>${esc(item.accountName)}</span><time>${item.checkedAt ? new Date(item.checkedAt).toLocaleString() : ''}</time></article>`).join('') || `<p>${activeSite ? '这个站点还没有按次模型价格。' : '还没有按次模型价格。请先在站点中拉取一次按次模型。'}</p>`;
-  $('#priceAlertHistory').innerHTML = alerts.map(item => `<article class="${item.unread ? 'unread' : ''}"><strong>${esc(item.comparisonName || item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>最低变体：${esc(item.modelName)}</span><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span><time>${new Date(item.detectedAt).toLocaleString()}</time></article>`).join('') || '<p>暂无降价提醒。</p>';
+  $('#priceAlertHistory').innerHTML = alerts.map(item => {
+    const watchText = item.pinned
+      ? item.watchStatus === 'missing' ? '当前已消失'
+        : `${esc(item.watchMessage || '持续观察中')} · 当前 ${esc(usdPerCall(item.currentPriceUsd))}${item.currentModelName ? ` · ${esc(item.currentModelName)}` : ''}${item.currentAccountName ? ` · ${esc(item.currentAccountName)}` : ''}`
+      : '';
+    return `<article class="${item.unread ? 'unread ' : ''}${item.pinned ? 'pinned' : ''}"><strong>${item.pinned ? '<i class="pin-mark">加精</i>' : ''}${esc(item.comparisonName || item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>当时最低变体：${esc(item.modelName)}</span><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span>${watchText ? `<p class="watch-state ${esc(item.watchStatus || 'watching')}">${watchText}</p>` : ''}<time>${new Date(item.detectedAt).toLocaleString()}${item.lastChangedAt ? ` · 最近变化 ${new Date(item.lastChangedAt).toLocaleString()}` : ''}</time><div class="price-alert-actions"><button class="ghost" onclick="togglePriceAlertPin('${esc(item.id)}',${!item.pinned})">${item.pinned ? '取消加精' : '加精'}</button><button class="ghost" onclick="dismissPriceAlert('${esc(item.id)}')">已读</button></div></article>`;
+  }).join('') || '<p>暂无降价提醒。</p>';
 };
 
 window.loadPriceAlerts = async () => {
   try {
     priceAlertData = await api('/api/price-alerts');
     renderPriceAlerts();
-    if (priceAlertData.unreadCount) {
-      await api('/api/price-alerts/read', { method: 'POST' });
-      setPriceAlertBadge(0);
-    }
+    setPriceAlertBadge(priceAlertData.unreadCount || 0);
   } catch (error) { alert(`降价提醒加载失败：${error.message}`); }
 };
 
@@ -140,9 +138,23 @@ window.scanPrices = async () => {
 };
 
 window.clearPriceAlertHistory = async () => {
-  if (!confirm('确定清空全部降价提醒吗？当前最低价基准会保留。')) return;
+  if (!confirm('确定清除全部未加精消息吗？加精观察项会保留。')) return;
   priceAlertData = await api('/api/price-alerts', { method: 'DELETE' });
-  renderPriceAlerts(); setPriceAlertBadge(0);
+  renderPriceAlerts(); setPriceAlertBadge(priceAlertData.unreadCount || 0);
+};
+
+window.togglePriceAlertPin = async (id, pinned) => {
+  try {
+    priceAlertData = await api(`/api/price-alerts/${encodeURIComponent(id)}/pin`, { method: 'POST', body: JSON.stringify({ pinned }) });
+    renderPriceAlerts(); setPriceAlertBadge(priceAlertData.unreadCount || 0);
+  } catch (error) { alert(`加精操作失败：${error.message}`); }
+};
+
+window.dismissPriceAlert = async id => {
+  try {
+    priceAlertData = await api(`/api/price-alerts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    renderPriceAlerts(); setPriceAlertBadge(priceAlertData.unreadCount || 0);
+  } catch (error) { alert(`已读操作失败：${error.message}`); }
 };
 
 window.loadStats = async () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, updatePriceWatchState } from '../src/price-alerts.js';
+import { buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
 
 test('price leaders compare only the same exact model name', () => {
   const accounts = [
@@ -59,4 +59,26 @@ test('first scan creates a baseline and later lower price creates one unread ale
   assert.equal(db.priceWatch.alerts[0].unread, true);
   updatePriceWatchState(db, [{ key: 'gpt-5.5', modelName: 'gpt-5.5', priceUsd: 0.02, accountId: 'b', accountName: 'B' }], new Date('2026-09-05T02:00:00Z'));
   assert.equal(db.priceWatch.alerts.length, 1);
+});
+
+test('pinned alert tracks price increases and model disappearance', () => {
+  const alert = { id: 'notice', pinned: true, unread: false, comparisonName: 'gpt-5.5', modelName: 'gpt-5.5-fast', newPriceUsd: 0.02, currentPriceUsd: 0.02, currentModelName: 'gpt-5.5-fast', currentAccountId: 'a', accountId: 'a' };
+  updatePinnedPriceAlerts([alert], [{ key: 'gpt-5.5', modelName: 'gpt-5.5-fast', priceUsd: 0.03, accountId: 'a', accountName: 'A' }], new Date('2026-09-06T00:00:00Z'));
+  assert.equal(alert.watchStatus, 'up');
+  assert.equal(alert.unread, true);
+  assert.equal(alert.currentPriceUsd, 0.03);
+  alert.unread = false;
+  updatePinnedPriceAlerts([alert], [], new Date('2026-09-06T01:00:00Z'));
+  assert.equal(alert.watchStatus, 'missing');
+  assert.equal(alert.currentPriceUsd, null);
+  assert.equal(alert.unread, true);
+});
+
+test('a pinned family updates in place instead of creating duplicate drop messages', () => {
+  const db = { priceWatch: { initialized: true, leaders: { 'gpt-5.5': { key: 'gpt-5.5', modelName: 'gpt-5.5', priceUsd: 0.03, accountId: 'a', accountName: 'A' } }, alerts: [{ id: 'notice', pinned: true, unread: false, comparisonName: 'gpt-5.5', modelName: 'gpt-5.5', newPriceUsd: 0.03, currentPriceUsd: 0.03, currentModelName: 'gpt-5.5', currentAccountId: 'a', accountId: 'a' }] } };
+  const created = updatePriceWatchState(db, [{ key: 'gpt-5.5', modelName: 'gpt-5.5', priceUsd: 0.02, accountId: 'b', accountName: 'B' }], new Date('2026-09-06T02:00:00Z'));
+  assert.equal(created.length, 0);
+  assert.equal(db.priceWatch.alerts.length, 1);
+  assert.equal(db.priceWatch.alerts[0].watchStatus, 'down');
+  assert.equal(db.priceWatch.alerts[0].currentAccountName, 'B');
 });

@@ -57,12 +57,57 @@ export function buildSitePrices(accounts = []) {
   return [...prices.values()].sort((a, b) => a.accountName.localeCompare(b.accountName) || a.comparisonName.localeCompare(b.comparisonName));
 }
 
+export function updatePinnedPriceAlerts(alerts = [], leaders = [], now = new Date()) {
+  const currentByFamily = new Map(leaders.map(item => [item.key || comparableModelName(item.modelName), item]));
+  const changedAt = now.toISOString();
+  for (const alert of alerts) {
+    if (!alert.pinned) continue;
+    const family = alert.comparisonName || comparableModelName(alert.modelName);
+    const current = currentByFamily.get(family);
+    const previousPrice = Number(alert.currentPriceUsd ?? alert.newPriceUsd);
+    const previousModel = alert.currentModelName || alert.modelName;
+    const previousAccountId = alert.currentAccountId || alert.accountId;
+    let change = null;
+
+    if (!current) {
+      if (alert.watchStatus !== 'missing') change = { status: 'missing', message: '当前已找不到这个模型' };
+      alert.currentPriceUsd = null;
+      alert.currentModelName = '';
+      alert.currentAccountId = '';
+      alert.currentAccountName = '';
+    } else {
+      if (alert.watchStatus === 'missing') change = { status: 'restored', message: '模型重新出现了' };
+      else if (Number.isFinite(previousPrice) && current.priceUsd > previousPrice + 1e-12) change = { status: 'up', message: '价格变贵了' };
+      else if (Number.isFinite(previousPrice) && current.priceUsd < previousPrice - 1e-12) change = { status: 'down', message: '价格又降低了' };
+      else if (previousModel !== current.modelName || previousAccountId !== current.accountId) change = { status: 'switched', message: '最低站点或模型变体已变化' };
+      alert.currentPriceUsd = current.priceUsd;
+      alert.currentModelName = current.modelName;
+      alert.currentAccountId = current.accountId;
+      alert.currentAccountName = current.accountName;
+    }
+
+    alert.lastWatchedAt = changedAt;
+    if (change) {
+      alert.watchStatus = change.status;
+      alert.watchMessage = change.message;
+      alert.lastChangedAt = changedAt;
+      alert.unread = true;
+    } else if (!alert.watchStatus) {
+      alert.watchStatus = current ? 'watching' : 'missing';
+      alert.watchMessage = current ? '持续观察中' : '当前已找不到这个模型';
+    }
+  }
+  return alerts;
+}
+
 export function updatePriceWatchState(db, leaders, now = new Date()) {
   const previous = db.priceWatch || {};
   const initialized = previous.initialized === true;
   const oldLeaders = previous.leaders || {};
   const nextLeaders = Object.fromEntries(leaders.map(item => [item.key, item]));
   const alerts = Array.isArray(previous.alerts) ? previous.alerts : [];
+  updatePinnedPriceAlerts(alerts, leaders, now);
+  const pinnedFamilies = new Set(alerts.filter(alert => alert.pinned).map(alert => alert.comparisonName || comparableModelName(alert.modelName)));
   const created = [];
   for (const current of leaders) {
     const old = oldLeaders[current.key] || Object.values(oldLeaders)
@@ -70,7 +115,7 @@ export function updatePriceWatchState(db, leaders, now = new Date()) {
       .sort((a, b) => a.priceUsd - b.priceUsd)[0];
     const isNewModel = initialized && !old;
     const isCheaper = old && current.priceUsd < old.priceUsd - 1e-12;
-    if (!isNewModel && !isCheaper) continue;
+    if ((!isNewModel && !isCheaper) || pinnedFamilies.has(current.key)) continue;
     created.push({
       id: crypto.randomUUID(), unread: true, kind: isNewModel ? 'new' : 'drop', comparisonName: current.key, modelName: current.modelName,
       oldPriceUsd: old?.priceUsd ?? null, newPriceUsd: current.priceUsd,
@@ -88,9 +133,18 @@ export function updatePriceWatchState(db, leaders, now = new Date()) {
 
 export function priceAlertsView(db = readStore()) {
   const watch = db.priceWatch || {};
-  const alerts = Array.isArray(watch.alerts) ? watch.alerts : [];
+  const alerts = Array.isArray(watch.alerts) ? [...watch.alerts].sort((a, b) => {
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+    const aTime = a.pinned ? a.pinnedAt || a.detectedAt : a.detectedAt;
+    const bTime = b.pinned ? b.pinnedAt || b.detectedAt : b.detectedAt;
+    return String(bTime || '').localeCompare(String(aTime || ''));
+  }) : [];
   const sitePrices = buildSitePrices(db.accounts || []);
-  const siteNames = new Map(sitePrices.map(item => [item.accountId, item.accountName]));
+  const siteNames = new Map((db.accounts || []).map(item => [item.id, item.name]));
+  for (const alert of alerts) {
+    if (alert.accountId && alert.accountName) siteNames.set(alert.accountId, alert.accountName);
+    if (alert.currentAccountId && alert.currentAccountName) siteNames.set(alert.currentAccountId, alert.currentAccountName);
+  }
   return {
     leaders: Object.values(watch.leaders || {}).sort((a, b) => a.modelName.localeCompare(b.modelName)),
     sitePrices,
@@ -136,7 +190,42 @@ export function markPriceAlertsRead() {
 
 export function clearPriceAlerts() {
   const db = readStore();
-  if (db.priceWatch) db.priceWatch.alerts = [];
+  if (db.priceWatch) db.priceWatch.alerts = (db.priceWatch.alerts || []).filter(alert => alert.pinned);
+  writeStore(db);
+  return priceAlertsView(db);
+}
+
+export function setPriceAlertPinned(id, pinned = true) {
+  const db = readStore();
+  const alert = db.priceWatch?.alerts?.find(item => item.id === id);
+  if (!alert) throw Error('提醒不存在');
+  alert.pinned = Boolean(pinned);
+  if (alert.pinned) {
+    const now = new Date().toISOString();
+    const family = alert.comparisonName || comparableModelName(alert.modelName);
+    const current = db.priceWatch?.leaders?.[family];
+    alert.pinnedAt = now;
+    alert.unread = false;
+    alert.lastWatchedAt = now;
+    alert.watchStatus = current ? 'watching' : 'missing';
+    alert.watchMessage = current ? '持续观察中' : '当前已找不到这个模型';
+    alert.currentPriceUsd = current?.priceUsd ?? null;
+    alert.currentModelName = current?.modelName || '';
+    alert.currentAccountId = current?.accountId || '';
+    alert.currentAccountName = current?.accountName || '';
+  } else {
+    delete alert.pinnedAt;
+  }
+  writeStore(db);
+  return priceAlertsView(db);
+}
+
+export function dismissPriceAlert(id) {
+  const db = readStore();
+  const alerts = db.priceWatch?.alerts || [];
+  const remaining = alerts.filter(alert => alert.id !== id);
+  if (remaining.length === alerts.length) throw Error('提醒不存在');
+  db.priceWatch.alerts = remaining;
   writeStore(db);
   return priceAlertsView(db);
 }

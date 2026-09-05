@@ -7,7 +7,7 @@ import { installGateway } from './gateway.js';
 import { createSession, validSession } from './session.js';
 import { gatewayStatistics } from './stats.js';
 import { browserAvailable, openBrowserLogin } from './browser.js';
-import { clearPriceAlerts, markPriceAlertsRead, priceAlertsView, scanPriceAlerts } from './price-alerts.js';
+import { clearPriceAlerts, dismissPriceAlert, markPriceAlertsRead, priceAlertsView, scanPriceAlerts, setPriceAlertPinned } from './price-alerts.js';
 
 const app = express();
 const port = Number(process.env.PORT || 8080);
@@ -66,6 +66,12 @@ app.post('/api/price-alerts/scan', auth, async (_req, res) => {
   try { res.json(await scanPriceAlerts()); } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/price-alerts/read', auth, (_req, res) => res.json(markPriceAlertsRead()));
+app.post('/api/price-alerts/:id/pin', auth, (req, res) => {
+  try { res.json(setPriceAlertPinned(req.params.id, req.body.pinned !== false)); } catch (error) { res.status(404).json({ error: error.message }); }
+});
+app.delete('/api/price-alerts/:id', auth, (req, res) => {
+  try { res.json(dismissPriceAlert(req.params.id)); } catch (error) { res.status(404).json({ error: error.message }); }
+});
 app.delete('/api/price-alerts', auth, (_req, res) => res.json(clearPriceAlerts()));
 app.post('/api/accounts', auth, (req, res) => {
   const b = req.body;

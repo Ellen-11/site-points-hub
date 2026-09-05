@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260906-43">
+  <link rel="stylesheet" href="/style.css?v=20260906-44">
 </head>
 <body>
 <main>
@@ -35,10 +35,10 @@
       <section class="panel logs-panel"><div id="logResults" class="log-results"></div></section>
     </div>
     <div id="priceAlertsView" class="page-view hidden">
-      <section class="stats-title"><div><p class="eyebrow">PER-CALL PRICE WATCH</p><h2>降价提醒</h2><p>模型名前三段（前两个 “-” 连接部分）相同就归为一组，在所有站点中比较最低按次价。</p></div><div class="refresh-box"><small id="priceAlertsUpdatedAt">尚未扫描</small><button id="scanPrices" onclick="scanPrices()">立即扫描</button></div></section>
+      <section class="stats-title"><div><p class="eyebrow">PER-CALL PRICE WATCH</p><h2>降价提醒</h2><p>只保留降价消息；已读会直接删除，加精后置顶并持续观察涨价、降价、消失和恢复。</p></div><div class="refresh-box"><small id="priceAlertsUpdatedAt">尚未扫描</small><button id="scanPrices" onclick="scanPrices()">立即扫描</button></div></section>
       <section class="stats price-alert-summary"><article><span>监控模型</span><strong id="priceLeaderCount">0</strong></article><article><span>未读提醒</span><strong id="priceUnreadCount">0</strong></article><article><span>监控站点</span><strong id="priceSiteCount">0</strong></article><article><span>本次失败</span><strong id="priceFailureCount">0</strong></article></section>
       <section class="panel price-filter"><div class="grid"><label>按站点筛选<select id="priceSiteFilter" onchange="renderPriceAlerts()"><option value="">全部站点</option></select></label><label>筛选模型<input id="priceModelFilter" placeholder="例如 gpt-5.5" oninput="renderPriceAlerts()"></label></div><p id="priceScanHint">首次扫描只建立价格基准，不产生提醒。</p></section>
-      <section class="ranking-grid price-watch-grid"><section class="panel"><h2 id="priceListTitle">当前最低按次价</h2><div id="priceLeaders" class="price-list"></div></section><section class="panel"><div class="panel-heading"><h2>降价历史</h2><button class="ghost compact-button" onclick="clearPriceAlertHistory()">清空</button></div><div id="priceAlertHistory" class="price-list alerts"></div></section></section>
+      <section class="panel price-history-panel"><div class="panel-heading"><h2>降价历史</h2><button class="ghost compact-button" onclick="clearPriceAlertHistory()">清除未加精</button></div><div id="priceAlertHistory" class="price-list alerts"></div></section>
     </div>
   </div>
 </main>
@@ -86,6 +86,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-43"></script>
+<script src="/app.js?v=20260906-44"></script>
 </body>
 </html>
