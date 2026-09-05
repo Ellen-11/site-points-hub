@@ -221,8 +221,10 @@ window.openModels = async id => {
   $('#modelPicker').showModal();
   try {
     pickedModels = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
-    activeBilling = 'call';
-    setBilling('call');
+    const preferredBilling = pickedModels.some(model => model.billing === activeBilling)
+      ? activeBilling
+      : pickedModels.some(model => model.billing === 'call') ? 'call' : 'token';
+    setBilling(preferredBilling);
   } catch (error) { $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`; }
 };
 window.showCategory = showCategory;
