@@ -41,6 +41,22 @@ export function buildPriceLeaders(accounts = []) {
   return [...leaders.values()].sort((a, b) => a.modelName.localeCompare(b.modelName));
 }
 
+export function buildSitePrices(accounts = []) {
+  const prices = new Map();
+  for (const account of accounts) {
+    for (const model of account.models || []) {
+      const comparisonName = comparableModelName(model.name);
+      const priceUsd = normalizedPerCallPrice(account, model);
+      if (!comparisonName || priceUsd === null) continue;
+      const key = `${account.id}:${comparisonName}`;
+      const candidate = { key, comparisonName, modelName: model.name, priceUsd, accountId: account.id, accountName: account.name, checkedAt: account.modelsCheckedAt || null };
+      const current = prices.get(key);
+      if (!current || candidate.priceUsd < current.priceUsd) prices.set(key, candidate);
+    }
+  }
+  return [...prices.values()].sort((a, b) => a.accountName.localeCompare(b.accountName) || a.comparisonName.localeCompare(b.comparisonName));
+}
+
 export function updatePriceWatchState(db, leaders, now = new Date()) {
   const previous = db.priceWatch || {};
   const initialized = previous.initialized === true;
@@ -73,8 +89,12 @@ export function updatePriceWatchState(db, leaders, now = new Date()) {
 export function priceAlertsView(db = readStore()) {
   const watch = db.priceWatch || {};
   const alerts = Array.isArray(watch.alerts) ? watch.alerts : [];
+  const sitePrices = buildSitePrices(db.accounts || []);
+  const siteNames = new Map(sitePrices.map(item => [item.accountId, item.accountName]));
   return {
     leaders: Object.values(watch.leaders || {}).sort((a, b) => a.modelName.localeCompare(b.modelName)),
+    sitePrices,
+    sites: [...siteNames].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
     alerts,
     unreadCount: alerts.filter(alert => alert.unread).length,
     initialized: watch.initialized === true,

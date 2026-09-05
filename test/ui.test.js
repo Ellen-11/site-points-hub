@@ -161,6 +161,7 @@ test('left navigation includes unread per-call price alerts', () => {
   assert.match(html, /id="priceAlertBadge"/);
   assert.match(html, /id="priceLeaders"/);
   assert.match(html, /id="priceAlertHistory"/);
+  assert.match(html, /id="priceSiteFilter"/);
   assert.match(source, /\/api\/price-alerts\/scan/);
   assert.match(source, /setPriceAlertBadge/);
 });

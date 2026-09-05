@@ -94,9 +94,17 @@ function usdPerCall(value) {
 
 window.renderPriceAlerts = () => {
   if (!priceAlertData) return;
+  const siteSelect = $('#priceSiteFilter');
+  const selectedSite = siteSelect.value;
+  siteSelect.innerHTML = '<option value="">全部站点</option>' + (priceAlertData.sites || []).map(site => `<option value="${esc(site.id)}">${esc(site.name)}</option>`).join('');
+  siteSelect.value = selectedSite;
+  const activeSite = siteSelect.value;
   const filter = String($('#priceModelFilter').value || '').trim().toLowerCase();
-  const leaders = priceAlertData.leaders.filter(item => !filter || `${item.comparisonName || item.key || ''} ${item.modelName}`.toLowerCase().includes(filter));
-  const alerts = priceAlertData.alerts.filter(item => !filter || `${item.comparisonName || ''} ${item.modelName}`.toLowerCase().includes(filter));
+  const priceSource = activeSite ? (priceAlertData.sitePrices || []).filter(item => item.accountId === activeSite) : priceAlertData.leaders;
+  const leaders = priceSource.filter(item => !filter || `${item.comparisonName || item.key || ''} ${item.modelName}`.toLowerCase().includes(filter));
+  const alerts = priceAlertData.alerts.filter(item => (!activeSite || item.accountId === activeSite) && (!filter || `${item.comparisonName || ''} ${item.modelName}`.toLowerCase().includes(filter)));
+  const siteName = (priceAlertData.sites || []).find(site => site.id === activeSite)?.name;
+  $('#priceListTitle').textContent = siteName ? `${siteName} · 按次价格` : '全部站点 · 当前最低按次价';
   $('#priceLeaderCount').textContent = priceAlertData.leaders.length.toLocaleString();
   $('#priceUnreadCount').textContent = priceAlertData.unreadCount.toLocaleString();
   $('#priceSiteCount').textContent = (priceAlertData.lastScan?.monitored || 0).toLocaleString();
@@ -105,7 +113,7 @@ window.renderPriceAlerts = () => {
   $('#priceScanHint').textContent = priceAlertData.lastScan
     ? `本次成功刷新 ${priceAlertData.lastScan.refreshed}/${priceAlertData.lastScan.monitored} 个站点${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。名称前三段（前两个 “-” 连接部分）相同的按次模型归为一组。`
     : '首次扫描只建立价格基准，不产生提醒。';
-  $('#priceLeaders').innerHTML = leaders.map(item => `<article><strong>${esc(item.comparisonName || item.key || item.modelName)}</strong><b>${esc(usdPerCall(item.priceUsd))}</b><span>最低变体：${esc(item.modelName)}</span><span>${esc(item.accountName)}</span><time>${item.checkedAt ? new Date(item.checkedAt).toLocaleString() : ''}</time></article>`).join('') || '<p>还没有按次模型价格。请先在站点中拉取一次按次模型。</p>';
+  $('#priceLeaders').innerHTML = leaders.map(item => `<article><strong>${esc(item.comparisonName || item.key || item.modelName)}</strong><b>${esc(usdPerCall(item.priceUsd))}</b><span>最低变体：${esc(item.modelName)}</span><span>${esc(item.accountName)}</span><time>${item.checkedAt ? new Date(item.checkedAt).toLocaleString() : ''}</time></article>`).join('') || `<p>${activeSite ? '这个站点还没有按次模型价格。' : '还没有按次模型价格。请先在站点中拉取一次按次模型。'}</p>`;
   $('#priceAlertHistory').innerHTML = alerts.map(item => `<article class="${item.unread ? 'unread' : ''}"><strong>${esc(item.comparisonName || item.modelName)}</strong><b class="price-drop">${esc(usdPerCall(item.newPriceUsd))}</b><span>最低变体：${esc(item.modelName)}</span><span>${item.kind === 'new' ? '新发现可用最低价' : `<span class="price-old">${esc(usdPerCall(item.oldPriceUsd))}</span> → 降价`}</span><span>${esc(item.accountName)}</span><time>${new Date(item.detectedAt).toLocaleString()}</time></article>`).join('') || '<p>暂无降价提醒。</p>';
 };
 

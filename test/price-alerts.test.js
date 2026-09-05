@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPriceLeaders, canonicalModelName, comparableModelName, normalizedPerCallPrice, updatePriceWatchState } from '../src/price-alerts.js';
+import { buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, updatePriceWatchState } from '../src/price-alerts.js';
 
 test('price leaders compare only the same exact model name', () => {
   const accounts = [
@@ -34,6 +34,16 @@ test('migrates exact-name price baselines into comparison groups without a false
   const created = updatePriceWatchState(db, [{ key: 'gemini-3.1-pro', comparisonName: 'gemini-3.1-pro', modelName: 'gemini-3.1-pro-low', priceUsd: 0.03, accountId: 'b', accountName: 'B' }], new Date('2026-09-05T03:00:00Z'));
   assert.equal(created.length, 0);
   assert.ok(db.priceWatch.leaders['gemini-3.1-pro']);
+});
+
+test('site price lists keep each site available for filtering', () => {
+  const prices = buildSitePrices([
+    { id: 'a', name: 'A', models: [{ name: 'gemini-3.1-pro-high', billing: 'call', price: 0.03, priceUnit: 'usd' }, { name: 'gemini-3.1-pro-low', billing: 'call', price: 0.02, priceUnit: 'usd' }] },
+    { id: 'b', name: 'B', models: [{ name: 'gemini-3.1-pro-low', billing: 'call', price: 0.01, priceUnit: 'usd' }] }
+  ]);
+  assert.equal(prices.length, 2);
+  assert.equal(prices.find(item => item.accountId === 'a').priceUsd, 0.02);
+  assert.equal(prices.find(item => item.accountId === 'b').priceUsd, 0.01);
 });
 
 test('quota prices are normalized to dollars before comparison', () => {
