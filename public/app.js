@@ -205,7 +205,7 @@ $('#tagPickerForm').onsubmit = async event => {
   $('#tagPicker').close(); load();
 };
 $('#closeTags').onclick = () => $('#tagPicker').close();
-let pickingAccount = ''; let pickedModels = [];
+let pickingAccount = ''; let pickedModels = []; let modelLoadSequence = 0; let modelsLoading = false;
 let activeBilling = localStorage.getItem('modelBilling') === 'token' ? 'token' : 'call';
 function showCategory(category) {
   document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));
@@ -216,6 +216,11 @@ function showCategory(category) {
   }).join('') || '<p>这个分类没有模型。</p>';
 }
 function renderCategories() {
+  if (modelsLoading) {
+    $('#modelCategories').innerHTML = '<p>正在拉取当前站点的模型和价格…</p>';
+    $('#modelChoices').innerHTML = '';
+    return;
+  }
   const visible = pickedModels.filter(model => model.billing === activeBilling);
   const categories = [...new Set(visible.map(model => model.category))];
   $('#modelCategories').innerHTML = categories.map(category => `<button class="category-button ghost" data-category="${esc(category)}" onclick="showCategory('${esc(category)}')">${esc(category)} <small>${visible.filter(model => model.category === category).length}</small></button>`).join('') || `<p>没有找到可用的${activeBilling === 'call' ? '按次' : '按量'}模型。</p>`;
@@ -224,17 +229,26 @@ function renderCategories() {
 }
 window.setBilling = billing => { activeBilling = billing; localStorage.setItem('modelBilling', billing); document.querySelectorAll('.billing-button').forEach(button => { const active = button.dataset.billing === billing; button.classList.toggle('active', active); button.classList.toggle('ghost', !active); }); renderCategories(); };
 window.openModels = async id => {
+  const requestSequence = ++modelLoadSequence;
   pickingAccount = id;
   const account = accounts.find(x => x.id === id);
   if (!account?.hasApiKey) return alert('请先编辑站点并填写 API Key');
+  pickedModels = [];
+  modelsLoading = true;
   $('#modelPickerTitle').textContent = `${account.name} · 选择模型`;
-  $('#modelCategories').innerHTML = '<p>正在拉取模型和价格…</p>';
-  $('#modelChoices').innerHTML = '';
   $('#modelPicker').showModal();
+  setBilling(activeBilling);
   try {
-    pickedModels = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
+    const models = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
+    if (requestSequence !== modelLoadSequence || pickingAccount !== id) return;
+    pickedModels = models;
+    modelsLoading = false;
     setBilling(activeBilling);
-  } catch (error) { $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`; }
+  } catch (error) {
+    if (requestSequence !== modelLoadSequence || pickingAccount !== id) return;
+    modelsLoading = false;
+    $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`;
+  }
 };
 window.showCategory = showCategory;
 window.chooseModel = async model => { await api(`/api/accounts/${pickingAccount}/model`, { method: 'POST', body: JSON.stringify({ model }) }); $('#modelPicker').close(); load(); };
@@ -247,7 +261,12 @@ window.testModel = async (id, button) => {
   } catch (error) { alert(`模型连接失败：${error.message}`); }
   finally { button.disabled = false; button.textContent = original; }
 };
-$('#closeModels').onclick = () => $('#modelPicker').close();
+$('#closeModels').onclick = () => {
+  modelLoadSequence++;
+  modelsLoading = false;
+  pickedModels = [];
+  $('#modelPicker').close();
+};
 window.togglePollTag = async (tag, enabled) => { try { await api('/api/poll-tags', { method: 'POST', body: JSON.stringify({ tag, enabled }) }); load(); } catch (error) { alert(error.message); } };
 window.deleteTag = async tag => {
   if (!confirm(`确定删除标签“${tag}”吗？它会从所有站点中移除。`)) return;

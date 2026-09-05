@@ -39,6 +39,14 @@ test('model picker preserves amount billing instead of forcing per-call', () => 
   assert.doesNotMatch(source, /preferredBilling/);
 });
 
+test('model picker never renders models left over from another site', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /pickedModels = \[\];\s*modelsLoading = true/);
+  assert.match(source, /const requestSequence = \+\+modelLoadSequence/);
+  assert.match(source, /requestSequence !== modelLoadSequence \|\| pickingAccount !== id/);
+  assert.match(source, /if \(modelsLoading\)/);
+});
+
 test('custom bearer accounts can save automatic refresh settings', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
