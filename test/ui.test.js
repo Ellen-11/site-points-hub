@@ -181,6 +181,8 @@ test('left navigation includes invitation usage alerts', () => {
   assert.match(html, /id="inviteAlertBadge"/);
   assert.match(html, /id="inviteAlertHistory"/);
   assert.match(html, /id="inviteSiteFilter"/);
+  assert.match(html, /id="inviteSiteCounts"/);
+  assert.match(html, />各站邀请人数</);
   assert.match(source, /\/api\/invite-alerts/);
   assert.match(source, /dismissInviteAlert/);
 });

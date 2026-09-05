@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260906-46">
+  <link rel="stylesheet" href="/style.css?v=20260906-47">
 </head>
 <body>
 <main>
@@ -44,6 +44,7 @@
       <section class="stats-title"><div><p class="eyebrow">REFERRAL WATCH</p><h2>邀请提醒</h2><p>刷新余额或自动轮询时检测邀请人数；首次只建立基准，人数增加后显示提醒。</p></div><div class="refresh-box"><small id="inviteAlertsUpdatedAt">尚未检测</small><button class="ghost" onclick="loadInviteAlerts()">刷新提醒</button></div></section>
       <section class="stats invite-alert-summary"><article><span>已识别站点</span><strong id="inviteMonitoredCount">0</strong></article><article><span>累计邀请</span><strong id="inviteTotalCount">0</strong></article><article><span>未读提醒</span><strong id="inviteUnreadCount">0</strong></article></section>
       <section class="panel price-filter"><label>按站点筛选<select id="inviteSiteFilter" onchange="renderInviteAlerts()"><option value="">全部站点</option></select></label><p>支持自动识别 aff_count、inviteCount 和 referralCount 等常见字段。</p></section>
+      <section class="panel invite-count-panel"><div class="panel-heading"><h2>各站邀请人数</h2><span class="hint">按人数从高到低排列</span></div><div id="inviteSiteCounts" class="invite-count-list"></div></section>
       <section class="panel invite-history-panel"><div class="panel-heading"><h2>新增邀请历史</h2><button class="ghost compact-button" onclick="clearInviteAlertHistory()">清空</button></div><div id="inviteAlertHistory" class="price-list invite-alert-list"></div></section>
     </div>
   </div>
@@ -92,6 +93,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-46"></script>
+<script src="/app.js?v=20260906-47"></script>
 </body>
 </html>

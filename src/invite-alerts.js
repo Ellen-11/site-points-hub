@@ -46,6 +46,12 @@ export function recordInviteCount(db, account, count, now = new Date()) {
 export function inviteAlertsView(db = readStore()) {
   const alerts = [...(db.inviteWatch?.alerts || [])].sort((a, b) => String(b.detectedAt || '').localeCompare(String(a.detectedAt || '')));
   const monitored = (db.accounts || []).filter(account => Number.isFinite(Number(account.inviteCount)) && account.inviteCount !== null);
+  const counts = monitored.map(account => ({
+    accountId: account.id,
+    accountName: account.name,
+    count: Math.max(0, Math.trunc(Number(account.inviteCount))),
+    checkedAt: account.inviteCountCheckedAt || null
+  })).sort((a, b) => b.count - a.count || a.accountName.localeCompare(b.accountName));
   const sites = new Map((db.accounts || []).map(account => [account.id, account.name]));
   for (const alert of alerts) if (alert.accountId && alert.accountName) sites.set(alert.accountId, alert.accountName);
   const lastCheckedAt = monitored.map(account => account.inviteCountCheckedAt || '').sort().at(-1) || null;
@@ -53,7 +59,8 @@ export function inviteAlertsView(db = readStore()) {
     alerts,
     unreadCount: alerts.filter(alert => alert.unread !== false).length,
     monitoredCount: monitored.length,
-    totalCount: monitored.reduce((sum, account) => sum + Math.max(0, Math.trunc(Number(account.inviteCount))), 0),
+    totalCount: counts.reduce((sum, account) => sum + account.count, 0),
+    counts,
     sites: [...sites].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
     lastCheckedAt
   };

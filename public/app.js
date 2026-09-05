@@ -104,11 +104,14 @@ window.renderInviteAlerts = () => {
   const selectedSite = siteSelect.value;
   siteSelect.innerHTML = '<option value="">全部站点</option>' + (inviteAlertData.sites || []).map(site => `<option value="${esc(site.id)}">${esc(site.name)}</option>`).join('');
   siteSelect.value = selectedSite;
-  const alerts = inviteAlertData.alerts.filter(item => !siteSelect.value || item.accountId === siteSelect.value);
+  const activeSite = siteSelect.value;
+  const alerts = inviteAlertData.alerts.filter(item => !activeSite || item.accountId === activeSite);
+  const counts = (inviteAlertData.counts || []).filter(item => !activeSite || item.accountId === activeSite);
   $('#inviteMonitoredCount').textContent = inviteAlertData.monitoredCount.toLocaleString();
   $('#inviteTotalCount').textContent = inviteAlertData.totalCount.toLocaleString();
   $('#inviteUnreadCount').textContent = inviteAlertData.unreadCount.toLocaleString();
   $('#inviteAlertsUpdatedAt').textContent = inviteAlertData.lastCheckedAt ? `检测于 ${new Date(inviteAlertData.lastCheckedAt).toLocaleString()}` : '尚未检测到邀请字段';
+  $('#inviteSiteCounts').innerHTML = counts.map(item => `<article><strong>${esc(item.accountName)}</strong><b>${Number(item.count).toLocaleString()} 人</b><time>${item.checkedAt ? `检测于 ${new Date(item.checkedAt).toLocaleString()}` : '已建立基准'}</time></article>`).join('') || '<p>当前筛选范围内暂无已识别的邀请人数。</p>';
   $('#inviteAlertHistory').innerHTML = alerts.map(item => `<article class="unread"><strong>${esc(item.accountName)}</strong><b class="invite-added">+${Number(item.addedCount).toLocaleString()} 人</b><span>邀请人数 ${Number(item.previousCount).toLocaleString()} → ${Number(item.currentCount).toLocaleString()}</span><time>${new Date(item.detectedAt).toLocaleString()}</time><div class="price-alert-actions"><button class="ghost" onclick="dismissInviteAlert('${esc(item.id)}')">已读</button></div></article>`).join('') || '<p>暂无新增邀请提醒。完成一次余额刷新后会开始记录。</p>';
 };
 
