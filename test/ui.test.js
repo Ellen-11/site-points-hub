@@ -131,6 +131,7 @@ test('public invite preview exposes only chosen names and links', () => {
   assert.match(html, /name="inviteUrl"/);
   assert.match(html, /href="\/invites\.html"/);
   assert.match(invites, /item\.name/);
+  assert.match(invites, /item\.tags/);
   assert.match(invites, /item\.url/);
   assert.doesNotMatch(invites, /balance|apiKey|credential|modelName/);
 });

@@ -23,7 +23,7 @@ app.get('/api/public/invites', (_req, res) => {
     try {
       const url = new URL(String(account.inviteUrl || ''));
       if (url.protocol !== 'https:') return [];
-      return [{ name: String(account.name || '').trim(), url: url.href }];
+      return [{ name: String(account.name || '').trim(), tags: (account.tags || []).map(tag => String(tag)).filter(Boolean), url: url.href }];
     } catch { return []; }
   }).filter(item => item.name);
   res.json({ invites });

@@ -8,7 +8,7 @@ fetch('/api/public/invites', { cache: 'no-store' })
   })
   .then(data => {
     list.innerHTML = data.invites.length
-      ? data.invites.map(item => `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.name)}</a>`).join('')
+      ? data.invites.map(item => `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(item.name)}</strong>${item.tags?.length ? `<span class="public-tags">${item.tags.map(tag => `<i>${escapeHtml(tag)}</i>`).join('')}</span>` : ''}</a>`).join('')
       : '<p>暂时没有公开的邀请链接。</p>';
   })
   .catch(() => { list.innerHTML = '<p>邀请链接加载失败，请稍后重试。</p>'; });
