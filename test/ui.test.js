@@ -41,12 +41,28 @@ test('model picker preserves amount billing instead of forcing per-call', () => 
 
 test('custom bearer accounts can save automatic refresh settings', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(html, /name="refreshPath"/);
   assert.match(html, /name="refreshCookie"/);
   assert.match(html, /遇到 401/);
   assert.match(html, /name="pricingCookie"/);
   assert.match(html, /name="modelBaseUrl"/);
   assert.match(html, /GET \/v1\/models/);
+  assert.match(html, /name="refreshMode"/);
+  assert.match(html, /服务器浏览器/);
+  assert.match(source, /\/browser-open/);
+});
+
+test('server browser routes require the admin session', () => {
+  const source = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  const startup = fs.readFileSync(new URL('../start-container.sh', import.meta.url), 'utf8');
+  assert.match(source, /app\.get\('\/browser', auth/);
+  assert.match(source, /app\.use\('\/browser', auth/);
+  assert.match(source, /validSession\(cookies\(req\)\.session, sessionSecret\)/);
+  assert.match(dockerfile, /chromium/);
+  assert.match(startup, /\/data\/browser-profile/);
+  assert.match(startup, /x11vnc .* -localhost/);
 });
 
 test('account save reports server validation errors and shows progress', () => {

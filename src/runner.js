@@ -1,6 +1,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
+import { refreshInBrowser } from './browser.js';
 
 const accountRunQueues = new Map();
 
@@ -52,7 +53,15 @@ export function refreshCookieFromHeaders(headers, fallback = '') {
 }
 
 async function refreshBearer(account) {
-  if (account.authType !== 'bearer' || !account.refreshPath || !account.refreshCookie) return false;
+  if (account.authType !== 'bearer' || !account.refreshPath) return false;
+  if (account.refreshMode === 'browser') {
+    const data = await refreshInBrowser(account.baseUrl, account.refreshPath);
+    const token = tokenFromRefresh(data);
+    if (!token) throw new Error('服务器浏览器刷新成功，但响应中没有新的 Access Token');
+    account.credential = encrypt(token);
+    return true;
+  }
+  if (!account.refreshCookie) return false;
   const url = await safeUrl(account.baseUrl, account.refreshPath);
   const currentCookie = decrypt(account.refreshCookie);
   const response = await fetch(url, {
