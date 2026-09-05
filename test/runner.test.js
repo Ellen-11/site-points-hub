@@ -115,6 +115,12 @@ test('includes token-priced models in the amount catalog', () => {
   assert.deepEqual(buildModelCatalog(models, pricing), [{ name: 'gpt-5.4', category: 'GPT', billing: 'token', price: 5, text: '5 额度/1K tokens' }]);
 });
 
+test('keeps models selectable when the panel has no pricing endpoint', () => {
+  assert.deepEqual(buildModelCatalog({ data: [{ id: 'gpt-direct' }] }, { data: [] }), [{
+    name: 'gpt-direct', category: 'GPT', billing: 'token', price: null, text: '价格未知 · 可正常选择和测试'
+  }]);
+});
+
 test('estimates remaining uses for per-call models', () => {
   assert.equal(estimateRemainingCalls(24495, { billing: 'call', price: 200, priceUnit: 'quota' }), 122);
   assert.equal(estimateRemainingCalls(5000000, { billing: 'call', price: 2, priceUnit: 'usd' }, 500000), 5);

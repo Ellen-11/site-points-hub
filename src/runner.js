@@ -209,7 +209,7 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       price_unit: 'quota'
     }))
     : Array.isArray(pricingResponse?.data) ? pricingResponse.data : Array.isArray(pricingResponse) ? pricingResponse : [];
-  return prices
+  const priced = prices
     .filter(x => available.has(x.model_name))
     .map(x => {
       const perCall = Number(x.quota_type) === 1 || x.price_type === 'call';
@@ -224,8 +224,12 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       const output = input * Number(x.completion_ratio || 1);
       return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio, text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M` };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+    .filter(Boolean);
+  const pricedNames = new Set(priced.map(model => model.name));
+  const unpriced = [...available]
+    .filter(name => !pricedNames.has(name))
+    .map(name => ({ name, category: modelCategory(name), billing: 'token', price: null, text: '价格未知 · 可正常选择和测试' }));
+  return [...priced, ...unpriced].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
 export function hasModelPricing(response) {
@@ -284,7 +288,13 @@ export async function refreshModelCatalog(id) {
   if (!account) throw new Error('账户不存在');
   const pricingAccount = pricingRequestAccount(account); const auth = pricingAuthType(pricingAccount);
   const models = await callApiKey(account, '/v1/models');
-  const pricing = await loadModelPricing(pricingAccount, auth);
+  let pricing = { data: [] };
+  try {
+    pricing = await loadModelPricing(pricingAccount, auth);
+    account.modelPricingError = '';
+  } catch (error) {
+    account.modelPricingError = error.message;
+  }
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
