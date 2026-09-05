@@ -49,6 +49,7 @@ export function inviteAlertsView(db = readStore()) {
   const counts = monitored.map(account => ({
     accountId: account.id,
     accountName: account.name,
+    url: account.baseUrl,
     count: Math.max(0, Math.trunc(Number(account.inviteCount))),
     checkedAt: account.inviteCountCheckedAt || null
   })).sort((a, b) => b.count - a.count || a.accountName.localeCompare(b.accountName));

@@ -187,6 +187,8 @@ test('left navigation includes invitation usage alerts', () => {
   assert.match(html, />各站邀请人数</);
   assert.match(source, /\/api\/invite-alerts/);
   assert.match(source, /dismissInviteAlert/);
+  assert.match(source, /打开站点查收/);
+  assert.match(source, /target="_blank"/);
 });
 
 test('public invite preview exposes only chosen names and links', () => {

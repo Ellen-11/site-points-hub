@@ -19,15 +19,16 @@ test('first invitation count creates a baseline and later increase creates an al
   assert.deepEqual(inviteAlertsView(db).counts.map(item => [item.accountName, item.count]), [['A', 4]]);
 });
 
-test('invitation view exposes a per-site breakdown ordered by count', () => {
+test('invitation view exposes linked per-site counts ordered by count', () => {
   const db = { accounts: [
-    { id: 'a', name: 'A', inviteCount: 2 },
-    { id: 'b', name: 'B', inviteCount: 5 },
+    { id: 'a', name: 'A', baseUrl: 'https://a.example', inviteCount: 2 },
+    { id: 'b', name: 'B', baseUrl: 'https://b.example', inviteCount: 5 },
     { id: 'c', name: 'C' }
   ], inviteWatch: { alerts: [] } };
   const view = inviteAlertsView(db);
   assert.equal(view.totalCount, 7);
   assert.deepEqual(view.counts.map(item => [item.accountName, item.count]), [['B', 5], ['A', 2]]);
+  assert.equal(view.counts[0].url, 'https://b.example');
 });
 
 test('a lower or unchanged invitation count only updates the baseline', () => {
