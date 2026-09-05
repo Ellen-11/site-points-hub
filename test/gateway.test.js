@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { extractUsage, installGateway, rewriteGatewayBody, selectGatewayCandidates } from '../src/gateway.js';
 
-test('gateway ignores the client model and uses polling sites in saved order', () => {
+test('gateway ignores the client model and uses gateway-tag sites in saved order', () => {
   const db = {
     pollTags: ['网关'],
     accounts: [

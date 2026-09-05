@@ -79,14 +79,31 @@ test('site cards include a real model invocation test', () => {
   assert.match(source, /本次已真实调用/);
 });
 
-test('polling is controlled by account tags', () => {
+test('gateway tags control which sites join the unified gateway', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(source, /#pollTags/);
-  assert.match(source, /#addTagForm/);
-  assert.match(source, /openTagPicker/);
-  assert.match(source, /\/tags/);
-  assert.match(source, /togglePollTag/);
-  assert.doesNotMatch(source, /参与轮询<\/label>/);
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(html, /网关标签/);
+  assert.match(html, /id="gatewayTags"/);
+  assert.match(source, /toggleGatewayTag/);
+  assert.match(source, /\/api\/gateway-tags/);
+  assert.match(server, /\/api\/gateway-tags/);
+  assert.doesNotMatch(html, /轮询/);
+  assert.doesNotMatch(source, /togglePollTag|\/api\/poll-tags|runBatch|#pollAll|POLL_INTERVAL/);
+  assert.doesNotMatch(server, /runAll|setInterval|poll-tags|\/polling/);
+});
+
+test('connection test reads models with url and key and reports plain errors', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const runner = fs.readFileSync(new URL('../src/runner.js', import.meta.url), 'utf8');
+  assert.match(source, /testConnection/);
+  assert.match(source, /连接失败：\$\{error\.message\}/);
+  assert.match(source, /在模型列表中，连接大概率可用/);
+  assert.match(source, />测试连接</);
+  assert.match(runner, /describeNetworkError|describeHttpError/);
+  assert.match(runner, /Key 无效或未授权/);
+  assert.match(runner, /域名无法解析/);
 });
 
 test('tag filter and order controls are available', () => {
@@ -106,13 +123,13 @@ test('created tags can be deleted with confirmation', () => {
   assert.match(source, /method: 'DELETE'/);
 });
 
-test('batch actions visibly run tagged sites one by one', () => {
+test('batch check-in marking runs filtered sites one by one', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(source, /async function runBatch/);
+  assert.match(source, /async function markBatch/);
   assert.match(source, /for \(let index = 0; index < targets\.length/);
   assert.match(source, /正在.*\$\{index \+ 1\}\/\$\{targets\.length\}/);
   assert.match(source, /const targets = currentVisible\(\)/);
-  assert.match(source, /当前筛选下没有可执行的站点/);
+  assert.match(source, /当前筛选下没有可记录的站点/);
 });
 
 test('check-in is recorded manually with a filter for unchecked sites', () => {

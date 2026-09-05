@@ -45,7 +45,7 @@ function render(data) {
   $('#uncheckedCount').textContent = data.accounts.filter(x => x.checkinState === 'unchecked').length;
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
-  $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
+  $('#gatewayTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="toggleGatewayTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#filterTags').innerHTML = `<button class="tag-toggle ${activeFilter ? 'ghost' : 'active'}" onclick="setTagFilter('')">全部</button>` + allTags.map(tag => `<button class="tag-toggle ${activeFilter === tag ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="setTagFilter(this.dataset.tag)">${esc(tag)}</button>`).join('');
   $('#filterCheckin').innerHTML = [['', '全部'], ['checked', '已签到'], ['unchecked', '未签到']].map(([value, label]) => `<button class="tag-toggle ${checkinFilter === value ? 'active' : 'ghost'}" onclick="setCheckinFilter('${value}')">${label}</button>`).join('');
   const visibleAccounts = data.accounts.filter(account => (!activeFilter || (account.tags || []).includes(activeFilter)) && (!checkinFilter || account.checkinState === checkinFilter));
@@ -57,7 +57,7 @@ function render(data) {
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.checkinState === 'checked' && a.checkinDate ? '签到记录于 ' + esc(a.checkinDate) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions">${a.checkinState === 'checked' ? `<button class="secondary" onclick="recordCheckin('${a.id}',false)">改记未签到</button>` : `<button class="secondary" onclick="recordCheckin('${a.id}',true)">记录已签到</button>`}<button onclick="run('${a.id}','poll')">刷新</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+      <div class="card-actions">${a.checkinState === 'checked' ? `<button class="secondary" onclick="recordCheckin('${a.id}',false)">改记未签到</button>` : `<button class="secondary" onclick="recordCheckin('${a.id}',true)">记录已签到</button>`}<button onclick="run('${a.id}','poll')">刷新</button><button class="ghost" onclick="testConnection('${a.id}',this)">测试连接</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
     </article>`).join('') : `<article class="panel"><p>${activeFilter || checkinFilter ? '当前筛选条件下没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
 }
 
@@ -76,7 +76,7 @@ window.loadLogs = async () => {
     $('#logAccount').innerHTML = '<option value="">全部站点</option>' + data.accounts.map(account => `<option value="${esc(account.id)}">${esc(account.name)}</option>`).join('');
     $('#logAccount').value = selected;
     $('#logResults').innerHTML = data.runs.map(run => {
-      const action = run.action === 'gateway' ? '网关' : run.action === 'checkin' ? '签到' : '轮询';
+      const action = run.action === 'gateway' ? '网关' : run.action === 'checkin' ? '签到' : '刷新';
       const result = run.status === 'ok' ? '成功' : '失败';
       const usage = Number.isFinite(run.totalTokens) ? `输入 ${run.inputTokens || 0} · 输出 ${run.outputTokens || 0} · 缓存 ${run.cachedTokens || 0} · 总计 ${run.totalTokens}` : '';
       const details = [run.modelName, usage, Number.isFinite(run.latencyMs) ? `${run.latencyMs} ms` : '', run.statusCode ? `HTTP ${run.statusCode}` : ''].filter(Boolean).join(' · ');
@@ -208,8 +208,21 @@ window.testModel = async (id, button) => {
   } catch (error) { alert(`模型连接失败：${error.message}`); }
   finally { button.disabled = false; button.textContent = original; }
 };
+window.testConnection = async (id, button) => {
+  const original = button.textContent;
+  button.disabled = true; button.textContent = '测试中…';
+  try {
+    const result = await api(`/api/accounts/${id}/models`, { method: 'POST' });
+    const models = result.models || [];
+    const account = accounts.find(x => x.id === id);
+    const selected = account?.modelName || '';
+    const guess = selected ? `\n所选模型 ${selected} ${models.some(model => model.name === selected) ? '在模型列表中，连接大概率可用' : '不在模型列表中，可能已下线或名称不符'}` : '\n尚未选择模型；列表可用即可正常选择';
+    alert(`连接成功：读取到 ${models.length} 个模型\n示例：${models.slice(0, 6).map(model => model.name).join('、')}${guess}`);
+  } catch (error) { alert(`连接失败：${error.message}`); }
+  finally { button.disabled = false; button.textContent = original; }
+};
 $('#closeModels').onclick = () => $('#modelPicker').close();
-window.togglePollTag = async (tag, enabled) => { try { await api('/api/poll-tags', { method: 'POST', body: JSON.stringify({ tag, enabled }) }); load(); } catch (error) { alert(error.message); } };
+window.toggleGatewayTag = async (tag, enabled) => { try { await api('/api/gateway-tags', { method: 'POST', body: JSON.stringify({ tag, enabled }) }); load(); } catch (error) { alert(error.message); } };
 window.deleteTag = async tag => {
   if (!confirm(`确定删除标签“${tag}”吗？它会从所有站点中移除。`)) return;
   await api(`/api/tags/${encodeURIComponent(tag)}`, { method: 'DELETE' });
@@ -217,22 +230,6 @@ window.deleteTag = async tag => {
   await load();
 };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
-async function runBatch(action, button) {
-  const targets = currentVisible();
-  if (!targets.length) return alert('当前筛选下没有可执行的站点。');
-  const original = button.textContent; let ok = 0; let failed = 0; button.disabled = true;
-  try {
-    for (let index = 0; index < targets.length; index += 1) {
-      const account = targets[index];
-      button.textContent = `${index + 1}/${targets.length} ${account.name}`;
-      $('#batchProgress').textContent = `正在刷新 ${index + 1}/${targets.length}：${account.name}`;
-      try { const result = await api(`/api/accounts/${account.id}/${action}`, { method: 'POST' }); result.lastStatus === 'error' ? failed += 1 : ok += 1; }
-      catch { failed += 1; }
-    }
-    $('#batchProgress').textContent = `执行完成：成功 ${ok} 个，失败 ${failed} 个。`;
-    await load();
-  } finally { button.disabled = false; button.textContent = original; }
-}
 async function markBatch(checked, button) {
   const targets = currentVisible();
   if (!targets.length) return alert('当前筛选下没有可记录的站点。');
@@ -248,7 +245,6 @@ async function markBatch(checked, button) {
     await load();
   } finally { button.disabled = false; button.textContent = original; }
 }
-$('#pollAll').onclick = event => runBatch('poll', event.currentTarget);
 $('#checkinAll').onclick = event => markBatch(true, event.currentTarget);
 $('#uncheckAll').onclick = event => markBatch(false, event.currentTarget);
 load();

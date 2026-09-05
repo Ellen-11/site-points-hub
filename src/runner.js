@@ -216,14 +216,19 @@ export async function modelApiUrl(account, endpoint) {
 async function callApiKey(account, endpoint, options = {}) {
   if (!account.apiKey) throw new Error('请先填写该站 API Key');
   const url = await modelApiUrl(account, endpoint);
-  const response = await fetch(url, {
-    method: options.method || 'GET',
-    headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'SitePointsHub/1.0' },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    redirect: 'error', signal: AbortSignal.timeout(options.timeoutMs || 20000)
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || data?.message || `模型接口 HTTP ${response.status}`);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: options.method || 'GET',
+      headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'SitePointsHub/1.0' },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      redirect: 'error', signal: AbortSignal.timeout(options.timeoutMs || 20000)
+    });
+  } catch (error) { throw new Error(describeNetworkError(error)); }
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error(`模型接口返回了非 JSON 内容 (HTTP ${response.status})，这个地址可能指向网页而不是 API`); }
+  if (!response.ok) throw new Error(describeHttpError(response.status, data));
   return data;
 }
 
@@ -481,18 +486,29 @@ export function runAccount(id) {
   return serializeAccountRun(id, () => runAccountUnlocked(id));
 }
 
-export function shouldPoll(account, pollTags = []) {
-  const enabledTags = new Set(pollTags);
+export function inGatewayTags(account, gatewayTags = []) {
+  const enabledTags = new Set(gatewayTags);
   return account.enabled && Array.isArray(account.tags) && account.tags.some(tag => enabledTags.has(tag));
 }
 
-export async function runAll() {
-  const db = readStore();
-  const ids = db.accounts.filter(account => shouldPoll(account, db.pollTags || [])).map(x => x.id);
-  const results = [];
-  for (const id of ids) {
-    try { results.push({ status: 'fulfilled', value: await runAccount(id) }); }
-    catch (reason) { results.push({ status: 'rejected', reason }); }
-  }
-  return results;
+export function describeNetworkError(error) {
+  const code = error?.cause?.code || error?.code || '';
+  if (/timeout|aborted|HEADERS_TIMEOUT/i.test(error?.message || '') || code === 'UND_ERR_HEADERS_TIMEOUT') return '连接超时：15 秒内没有收到响应，检查地址是否可达或被防火墙拦截';
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return `域名无法解析（${code}），检查 API 地址拼写`;
+  if (code === 'ECONNREFUSED') return '连接被拒绝：该地址上没有服务在监听';
+  if (code === 'ECONNRESET') return '连接被对端重置，可能是网络问题或站点风控';
+  if (/CERT/i.test(code)) return `TLS 证书校验失败（${code}）`;
+  return `网络错误：${error?.message || error}${code ? `（${code}）` : ''}`;
 }
+
+export function describeHttpError(status, data = {}) {
+  const message = String(data?.error?.message || data?.message || '').trim();
+  const suffix = message ? `：${message}` : '';
+  if (status === 401) return `Key 无效或未授权 (HTTP 401)${suffix}`;
+  if (status === 403) return `Key 没有访问该资源的权限 (HTTP 403)${suffix}`;
+  if (status === 404) return '地址不对：没有找到 /v1/models (HTTP 404)，检查模型 API 地址是否需要以 /v1 结尾';
+  if (status === 429) return `请求过于频繁 (HTTP 429)${suffix}`;
+  if (status >= 500) return `站点服务异常 (HTTP ${status})${suffix}`;
+  return `连接失败 (HTTP ${status})${suffix}`;
+}
+

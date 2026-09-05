@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, describeHttpError, describeNetworkError, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, inGatewayTags, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   const rotated = ['fresh', 'token'].join('-');
@@ -94,11 +94,21 @@ test('direct model API accepts both host and v1 base addresses', async () => {
   assert.equal((await modelApiUrl({ baseUrl: 'https://site.example', modelBaseUrl: 'https://example.com/v1' }, '/v1/models')).href, 'https://example.com/v1/models');
 });
 
-test('only sites with an enabled tag participate in polling', () => {
-  assert.equal(shouldPoll({ enabled: true, tags: ['常用'] }, ['常用']), true);
-  assert.equal(shouldPoll({ enabled: true, tags: ['备用'] }, ['常用']), false);
-  assert.equal(shouldPoll({ enabled: true, tags: [] }, ['常用']), false);
-  assert.equal(shouldPoll({ enabled: false, tags: ['常用'] }, ['常用']), false);
+test('only sites with an enabled gateway tag join the gateway', () => {
+  assert.equal(inGatewayTags({ enabled: true, tags: ['常用'] }, ['常用']), true);
+  assert.equal(inGatewayTags({ enabled: true, tags: ['备用'] }, ['常用']), false);
+  assert.equal(inGatewayTags({ enabled: true, tags: [] }, ['常用']), false);
+  assert.equal(inGatewayTags({ enabled: false, tags: ['常用'] }, ['常用']), false);
+});
+
+test('model connection failures are explained in plain language', () => {
+  const dnsError = new Error('getaddrinfo failed'); dnsError.code = 'ENOTFOUND';
+  assert.match(describeNetworkError(dnsError), /域名无法解析/);
+  assert.match(describeNetworkError(new Error('Operation was aborted')), /连接超时/);
+  assert.match(describeNetworkError(Object.assign(new Error('connect failed'), { cause: { code: 'ECONNREFUSED' } })), /连接被拒绝/);
+  assert.equal(describeHttpError(401, { error: { message: 'invalid key' } }), 'Key 无效或未授权 (HTTP 401)：invalid key');
+  assert.match(describeHttpError(404, {}), /地址不对/);
+  assert.match(describeHttpError(500, { message: 'upstream boom' }), /站点服务异常.*upstream boom/);
 });
 
 test('categorizes and keeps only available per-call models', () => {

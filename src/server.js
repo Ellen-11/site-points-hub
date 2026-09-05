@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { encrypt, readStore, writeStore } from './store.js';
-import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, runAll, testModelConnection } from './runner.js';
+import { estimateAccountCalls, refreshModelCatalog, refreshModelPrice, runAccount, testModelConnection } from './runner.js';
 import { installGateway } from './gateway.js';
 import { createSession, validSession } from './session.js';
 
@@ -116,18 +116,12 @@ app.post('/api/accounts/order', auth, (req, res) => {
   db.accounts = db.accounts.map(account => selected.has(account.id) ? ordered[index++] : account);
   writeStore(db); res.json({ ok: true });
 });
-app.post('/api/poll-tags', auth, (req, res) => {
+app.post('/api/gateway-tags', auth, (req, res) => {
   const tag = String(req.body.tag || '').trim();
   if (!tag) return res.status(400).json({ error: '标签不能为空' });
   const db = readStore(); const tags = new Set(db.pollTags || []);
   if (req.body.enabled === true) tags.add(tag); else tags.delete(tag);
   db.pollTags = [...tags]; writeStore(db); res.json({ ok: true, pollTags: db.pollTags });
-});
-app.post('/api/accounts/:id/polling', auth, (req, res) => {
-  const db = readStore(); const account = db.accounts.find(x => x.id === req.params.id);
-  if (!account) return res.status(404).json({ error: '账户不存在' });
-  account.pollEnabled = req.body.enabled === true;
-  writeStore(db); res.json({ ok: true, pollEnabled: account.pollEnabled });
 });
 app.post('/api/accounts/:id/pricing', auth, async (req, res) => { try { res.json(await refreshModelPrice(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); } });
 app.post('/api/accounts/:id/models', auth, async (req, res) => { try { res.json({ models: await refreshModelCatalog(req.params.id) }); } catch (e) { res.status(400).json({ error: e.message }); } });
@@ -149,11 +143,5 @@ app.post('/api/accounts/:id/:action', auth, async (req, res) => {
   if (req.params.action !== 'poll') return res.status(400).json({ error: '不支持的操作；签到请使用手动记录' });
   try { res.json(await runAccount(req.params.id)); } catch (e) { res.status(400).json({ error: e.message }); }
 });
-app.post('/api/run-all/:action', auth, async (req, res) => {
-  if (req.params.action !== 'poll') return res.status(400).json({ error: '不支持的操作；签到请使用手动记录' });
-  await runAll(); res.json({ ok: true });
-});
-
-setInterval(async () => { await runAll(); }, Math.max(1, Number(process.env.POLL_INTERVAL_MINUTES || 30)) * 60000).unref();
 
 const server = app.listen(port, '0.0.0.0', () => console.log(`Site Points Hub listening on ${port}`));

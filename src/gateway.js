@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { decrypt, readStore, writeStore } from './store.js';
-import { modelApiUrl, shouldPoll } from './runner.js';
+import { inGatewayTags, modelApiUrl } from './runner.js';
 
 function authorized(req) {
   const expected = process.env.GATEWAY_API_KEY || '';
@@ -12,7 +12,7 @@ function authorized(req) {
 }
 
 export function selectGatewayCandidates(db) {
-  return db.accounts.filter(account => shouldPoll(account, db.pollTags || []) && account.apiKey && account.modelName);
+  return db.accounts.filter(account => inGatewayTags(account, db.pollTags || []) && account.apiKey && account.modelName);
 }
 
 export function rewriteGatewayBody(body, account, endpoint = '') {
