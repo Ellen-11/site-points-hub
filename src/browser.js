@@ -130,20 +130,32 @@ async function tokenFromTarget(target, reload = false) {
   }
 }
 
-async function clickLoginAction(target, actionText) {
-  const expected = normalizeLoginActionText(actionText);
+async function evaluateUntil(client, expression, attempts = 20) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const result = await client.call('Runtime.evaluate', { expression, returnByValue: true });
+      if (!result?.exceptionDetails && result?.result?.value === true) return true;
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+  return false;
+}
+
+async function performLoginAction(target, options = {}) {
+  const expected = normalizeLoginActionText(options.actionText);
   if (!expected) return { clicked: false, token: '' };
   const client = await connectCdp(target.webSocketDebuggerUrl);
+  let off = () => {};
   try {
     await client.call('Runtime.enable');
     await client.call('Network.enable');
     let finish;
     const captured = new Promise(resolve => { finish = resolve; });
-    const off = client.on('Network.requestWillBeSent', event => {
+    off = client.on('Network.requestWillBeSent', event => {
       const token = bearerTokenFromHeaders(event?.request?.headers);
       if (token) finish(token);
     });
-    const expression = `(() => {
+    const clickExpression = `(() => {
       const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
       const expected = ${JSON.stringify(expected)};
       const elements = [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')];
@@ -152,19 +164,51 @@ async function clickLoginAction(target, actionText) {
       target.click();
       return true;
     })()`;
-    const result = await client.call('Runtime.evaluate', { expression, returnByValue: true });
-    const clicked = result?.result?.value === true;
-    if (!clicked) { off(); return { clicked: false, token: '' }; }
+    const clicked = await evaluateUntil(client, clickExpression, 3);
+    if (!clicked) return { clicked: false, token: '' };
+
+    if (options.username && options.password) {
+      const fillExpression = `(() => {
+        const visible = element => element && !element.disabled && element.getClientRects().length;
+        const password = [...document.querySelectorAll('input[type="password"]')].find(visible);
+        const usernames = [...document.querySelectorAll('input[autocomplete="username"],input[name*="user" i],input[name*="email" i],input[type="email"],input[type="text"]')];
+        const username = usernames.find(element => visible(element) && element !== password);
+        if (!username || !password) return false;
+        const setValue = (element, value) => {
+          const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
+          if (setter) setter.call(element, value); else element.value = value;
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        setValue(username, ${JSON.stringify(options.username)});
+        setValue(password, ${JSON.stringify(options.password)});
+        return true;
+      })()`;
+      const filled = await evaluateUntil(client, fillExpression, 20);
+      if (filled) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const submitExpression = `(() => {
+          const password = [...document.querySelectorAll('input[type="password"]')].find(element => element.getClientRects().length);
+          if (!password) return false;
+          const form = password.form || password.closest('form');
+          const submit = [...(form || document).querySelectorAll('button[type="submit"],input[type="submit"],button')].find(element => !element.disabled && element.getClientRects().length);
+          if (submit) { submit.click(); return true; }
+          if (form?.requestSubmit) { form.requestSubmit(); return true; }
+          return false;
+        })()`;
+        await evaluateUntil(client, submitExpression, 5);
+      }
+    }
     const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 10000))]);
-    off();
     return { clicked: true, token };
   } finally {
+    off();
     client.close();
   }
 }
 
-async function recoverTokenWithLoginAction(target, actionText, origin) {
-  const clicked = await clickLoginAction(target, actionText);
+async function recoverTokenWithLoginAction(target, loginOptions, origin) {
+  const clicked = await performLoginAction(target, loginOptions);
   if (clicked.token) return clicked.token;
   if (!clicked.clicked) return '';
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -178,11 +222,12 @@ async function recoverTokenWithLoginAction(target, actionText, origin) {
   return '';
 }
 
-export async function accessTokenInBrowser(baseUrl, loginActionText = '') {
+export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
+  if (typeof loginOptions === 'string') loginOptions = { actionText: loginOptions };
   const origin = new URL(baseUrl).origin;
   const existing = await existingOriginTargets(origin);
-  if (existing[0] && loginActionText) {
-    const token = await recoverTokenWithLoginAction(existing[0], loginActionText, origin);
+  if (existing[0] && loginOptions.actionText) {
+    const token = await recoverTokenWithLoginAction(existing[0], loginOptions, origin);
     if (token) return token;
   }
   for (const target of existing) {
@@ -198,8 +243,8 @@ export async function accessTokenInBrowser(baseUrl, loginActionText = '') {
       await client.call('Runtime.enable');
       await waitForOrigin(client, origin);
     } finally { client.close(); }
-    if (loginActionText) {
-      const token = await recoverTokenWithLoginAction(target, loginActionText, origin);
+    if (loginOptions.actionText) {
+      const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
       if (token) return token;
     }
     return await tokenFromTarget(target, true);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -38,6 +38,13 @@ test('reads bearer tokens captured from browser network requests', () => {
 test('normalizes configured browser login button text', () => {
   assert.equal(normalizeLoginActionText(' Sign up '), 'signup');
   assert.equal(normalizeLoginActionText('SIGN-UP'), 'signup');
+});
+
+test('loads browser login credentials from scoped environment variables', () => {
+  const account = { id: 'a', name: '星期五', baseUrl: 'https://friday.example' };
+  const env = { BROWSER_LOGIN_ACCOUNT: '星期五', BROWSER_LOGIN_ACTION: 'Sign in', BROWSER_LOGIN_USERNAME: 'user', BROWSER_LOGIN_PASSWORD: 'secret' };
+  assert.deepEqual(browserLoginOptions(account, env), { actionText: 'Sign in', username: 'user', password: 'secret' });
+  assert.deepEqual(browserLoginOptions({ ...account, name: '其他' }, env), { actionText: '', username: '', password: '' });
 });
 
 test('serializes concurrent balance and check-in runs for the same account', async () => {

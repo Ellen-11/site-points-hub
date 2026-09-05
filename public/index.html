@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260906-50">
+  <link rel="stylesheet" href="/style.css?v=20260906-51">
 </head>
 <body>
 <main>
@@ -72,8 +72,8 @@
     </div>
     <label>登录保持方式<select name="refreshMode"><option value="http">使用已填写的 Cookie / Token</option><option value="browser">服务器浏览器（需远程登录一次）</option></select></label>
     <p class="hint">所有面板类型都可使用。遇到 401 时，Bearer 会先自动换取新 Token；Session/Cookie 失效、跳转登录页或普通请求被拦截时，会直接借用服务器浏览器里的登录状态重试。选择服务器浏览器后，请先在站点卡片点击“浏览器登录”。</p>
-    <label>失效后自动点击的登录按钮<input name="browserLoginAction" placeholder="例如 Sign up；留空则不自动点击"></label>
-    <p class="hint">仅服务器浏览器模式使用。遇到 401 且网页里存在完全相同文字的按钮时自动点击一次，再等待网页重新生成令牌；验证码或需要重新输入账号时仍需手动登录。</p>
+    <label>失效后自动点击的登录按钮<input name="browserLoginAction" placeholder="例如 Sign in；留空可使用服务器环境变量"></label>
+    <p class="hint">自动登录账号密码只从服务器环境变量读取，不保存在站点配置和仓库中。设置 BROWSER_LOGIN_ACCOUNT、BROWSER_LOGIN_ACTION、BROWSER_LOGIN_USERNAME、BROWSER_LOGIN_PASSWORD；验证码或人机验证仍需手动登录。</p>
     <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
     <p class="hint">所有面板类型都可填写；仅用于读取模型价格，不影响余额、签到和网关认证。</p>
     <h2 class="form-section">模型价格</h2>
@@ -95,6 +95,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-50"></script>
+<script src="/app.js?v=20260906-51"></script>
 </body>
 </html>

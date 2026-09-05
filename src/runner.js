@@ -92,6 +92,19 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
   return !retried && panelType !== 'public' && account.refreshMode === 'browser';
 }
 
+export function browserLoginOptions(account, env = process.env) {
+  const selector = String(env.BROWSER_LOGIN_ACCOUNT || '').trim().toLowerCase();
+  let hostname = '';
+  try { hostname = new URL(account.baseUrl).hostname.toLowerCase(); } catch {}
+  const identities = [account.id, account.name, account.baseUrl, hostname].map(value => String(value || '').trim().toLowerCase());
+  const matched = !selector || identities.includes(selector);
+  return {
+    actionText: account.browserLoginAction || (matched ? String(env.BROWSER_LOGIN_ACTION || '') : ''),
+    username: matched ? String(env.BROWSER_LOGIN_USERNAME || '') : '',
+    password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : ''
+  };
+}
+
 function browserAuthHeaders(account, panelType, includeCredential = false) {
   const headers = panelType === 'newapi' ? { 'new-api-user': String(account.userId || '') } : {};
   if (!includeCredential) return headers;
@@ -116,7 +129,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   if (shouldUseBrowserSession(account, panelType, retried)) {
     let browserError;
     try {
-      const token = await accessTokenInBrowser(account.baseUrl, account.browserLoginAction);
+      const token = await accessTokenInBrowser(account.baseUrl, browserLoginOptions(account));
       if (token) {
         const previousBrowserAccessToken = account.browserAccessToken;
         account.browserAccessToken = encrypt(token);
