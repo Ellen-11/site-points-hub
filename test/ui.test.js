@@ -124,3 +124,13 @@ test('left navigation includes filterable run logs', () => {
   assert.match(html, /id="logAccount"/);
   assert.match(source, /\/api\/logs\?/);
 });
+
+test('public invite preview exposes only chosen names and links', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const invites = fs.readFileSync(new URL('../public/invites.js', import.meta.url), 'utf8');
+  assert.match(html, /name="inviteUrl"/);
+  assert.match(html, /href="\/invites\.html"/);
+  assert.match(invites, /item\.name/);
+  assert.match(invites, /item\.url/);
+  assert.doesNotMatch(invites, /balance|apiKey|credential|modelName/);
+});

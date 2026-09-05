@@ -17,6 +17,17 @@ installGateway(app);
 function cookies(req) { return Object.fromEntries((req.headers.cookie || '').split(';').filter(Boolean).map(x => x.trim().split('='))); }
 function auth(req, res, next) { if (!validSession(cookies(req).session, sessionSecret)) return res.status(401).json({ error: '请先登录' }); next(); }
 app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/public/invites', (_req, res) => {
+  const db = readStore();
+  const invites = db.accounts.flatMap(account => {
+    try {
+      const url = new URL(String(account.inviteUrl || ''));
+      if (url.protocol !== 'https:') return [];
+      return [{ name: String(account.name || '').trim(), url: url.href }];
+    } catch { return []; }
+  }).filter(item => item.name);
+  res.json({ invites });
+});
 app.post('/api/login', (req, res) => {
   const a = Buffer.from(String(req.body.password || '')); const b = Buffer.from(password);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ error: '密码错误' });
@@ -51,7 +62,7 @@ app.post('/api/accounts', auth, (req, res) => {
   const db = readStore(); const old = b.id && db.accounts.find(x => x.id === b.id);
   const tags = b.tags === undefined ? old?.tags || [] : Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(/[,，]/);
   const account = {
-    ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), modelBaseUrl: b.modelBaseUrl?.trim().replace(/\/$/, '') || '', panelType: b.panelType || 'auto', currency: b.currency || 'auto', userId: b.userId?.trim() || '', modelName: b.modelName !== undefined ? b.modelName.trim() : old?.modelName || '', tags: [...new Set(tags.map(x => String(x).trim()).filter(Boolean))].slice(0, 10), balancePath: b.balancePath?.trim() || '', balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', refreshPath: b.refreshPath?.trim() || '', enabled: b.enabled !== false,
+    ...old, id: old?.id || crypto.randomUUID(), name: b.name.trim(), baseUrl: b.baseUrl.trim().replace(/\/$/, ''), inviteUrl: b.inviteUrl?.trim() || '', modelBaseUrl: b.modelBaseUrl?.trim().replace(/\/$/, '') || '', panelType: b.panelType || 'auto', currency: b.currency || 'auto', userId: b.userId?.trim() || '', modelName: b.modelName !== undefined ? b.modelName.trim() : old?.modelName || '', tags: [...new Set(tags.map(x => String(x).trim()).filter(Boolean))].slice(0, 10), balancePath: b.balancePath?.trim() || '', balanceField: b.balanceField || 'balance', balanceDivisor: b.balanceDivisor || '1', checkinPath: b.checkinPath?.trim() || '', checkinMethod: b.checkinMethod || 'POST', authType: b.authType || 'bearer', headerName: b.headerName || '', refreshPath: b.refreshPath?.trim() || '', enabled: b.enabled !== false,
     credential: b.credential ? encrypt(b.credential.replace(/^Bearer\s+/i, '')) : old?.credential || '',
     refreshCookie: b.refreshCookie ? encrypt(b.refreshCookie.replace(/^Cookie:\s*/i, '')) : old?.refreshCookie || '',
     pricingCookie: b.pricingCookie ? encrypt(b.pricingCookie.replace(/^Cookie:\s*/i, '')) : old?.pricingCookie || '',
