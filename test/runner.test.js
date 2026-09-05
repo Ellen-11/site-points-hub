@@ -1,10 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
   assert.equal(refreshCookieFromHeaders(new Headers({ 'set-cookie': 'new_api_refresh=rotated; Path=/api/user/auth; HttpOnly' }), 'old'), 'new_api_refresh=rotated');
+});
+
+test('refreshes bearer auth for nonstandard expired-login responses', () => {
+  assert.equal(isExpiredAuthentication(401, {}), true);
+  assert.equal(isExpiredAuthentication(403, { message: 'Forbidden' }), true);
+  assert.equal(isExpiredAuthentication(400, { error: 'Unauthorized' }), true);
+  assert.equal(isExpiredAuthentication(200, { message: 'invalid access token' }), true);
+  assert.equal(isExpiredAuthentication(500, { message: 'upstream failed' }), false);
 });
 
 test('reads nested balance fields', () => {

@@ -58,6 +58,11 @@ async function refreshBearer(account) {
   return true;
 }
 
+export function isExpiredAuthentication(status, data) {
+  const message = String(data?.error?.message || data?.error || data?.message || data?.msg || '');
+  return status === 401 || status === 403 || /unauthorized|invalid\s+(access\s+)?token|not\s+logged\s+in|登录已?失效|未登录|请先登录/i.test(message);
+}
+
 async function call(account, endpoint, method, panelType = 'generic', retried = false) {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
@@ -79,10 +84,13 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error(/^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`); }
-  if (response.status === 401 && !retried && panelType === 'generic' && await refreshBearer(account)) {
+  if (isExpiredAuthentication(response.status, data) && !retried && panelType === 'generic' && await refreshBearer(account)) {
     return call(account, endpoint, method, panelType, true);
   }
-  if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = data?.error?.message || data?.error || data?.message || data?.msg;
+    throw new Error(message ? `${message} (HTTP ${response.status})` : `HTTP ${response.status}`);
+  }
   return data;
 }
 
