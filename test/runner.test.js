@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -13,6 +13,21 @@ test('refreshes bearer auth for nonstandard expired-login responses', () => {
   assert.equal(isExpiredAuthentication(400, { error: 'Unauthorized' }), true);
   assert.equal(isExpiredAuthentication(200, { message: 'invalid access token' }), true);
   assert.equal(isExpiredAuthentication(500, { message: 'upstream failed' }), false);
+});
+
+test('serializes concurrent balance and check-in runs for the same account', async () => {
+  const events = []; let releaseFirst;
+  const first = serializeAccountRun('same-site', async () => {
+    events.push('first-start');
+    await new Promise(resolve => { releaseFirst = resolve; });
+    events.push('first-end');
+  });
+  const second = serializeAccountRun('same-site', async () => { events.push('second-start'); });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(events, ['first-start']);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(events, ['first-start', 'first-end', 'second-start']);
 });
 
 test('reads nested balance fields', () => {

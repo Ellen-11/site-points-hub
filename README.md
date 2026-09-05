@@ -30,6 +30,7 @@ npm start
 若站点余额使用 Bearer、模型价格接口却使用浏览器登录 Cookie，可单独填写“价格 Cookie”；它只用于价格接口，不会覆盖余额与签到凭据。
 
 Bearer 自动刷新会识别 HTTP 401、403，以及常见的 Unauthorized、invalid access token、未登录等过期响应；刷新成功后保存轮换后的 Token 与 Cookie，并自动重试原请求一次。
+同一站点的手动刷新、批量轮询、签到和定时任务会进入独立串行队列，避免并发请求重复使用一次性 refresh Cookie，或由旧任务覆盖轮换后的新 Cookie。
 
 每个站点可以独立保存模型 API 地址和 API Key。地址可直接填写到 `/v1`，应用优先从 `/v1/models` 拉取可用模型，并依次探测站点的 `/api/pricing`、`/api/models/pricing` 和 `/api/models` 价格数据；若 `/v1/models` 被上游拒绝，则自动从价格列表提取模型。网页回退或不含价格字段的 JSON 会被自动跳过。价格接口不可用时，模型仍会以“价格未知”显示并可正常选择、测试和用于网关。可在按次和按量计费间切换，再按 GPT、Gemini、Claude、DeepSeek、Qwen、图像、视频和其他分类浏览。只有最终手动选中的一个模型会绑定到该站并进入统一网关，测试模型和网关请求也会使用这组独立地址与 Key。
 

@@ -2,6 +2,17 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, readStore, writeStore } from './store.js';
 
+const accountRunQueues = new Map();
+
+export function serializeAccountRun(id, task) {
+  const previous = accountRunQueues.get(id) || Promise.resolve();
+  const current = previous.catch(() => {}).then(task);
+  accountRunQueues.set(id, current);
+  return current.finally(() => {
+    if (accountRunQueues.get(id) === current) accountRunQueues.delete(id);
+  });
+}
+
 function privateIp(ip) {
   return ip === '::1' || ip.startsWith('127.') || ip.startsWith('10.') || ip.startsWith('192.168.') ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || ip.startsWith('169.254.') || ip.startsWith('fc') || ip.startsWith('fd');
@@ -50,7 +61,7 @@ async function refreshBearer(account) {
     redirect: 'error', signal: AbortSignal.timeout(15000)
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message || `刷新登录失败 (HTTP ${response.status})`);
+  if (!response.ok) throw new Error(`自动刷新失败：${data?.message || data?.error || `HTTP ${response.status}`} (HTTP ${response.status})`);
   const token = tokenFromRefresh(data) || String(response.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) throw new Error('刷新接口成功，但响应中没有新的 Access Token');
   account.credential = encrypt(token);
@@ -296,7 +307,7 @@ export function buildPerCallCatalog(modelsResponse, pricingResponse) {
   return buildModelCatalog(modelsResponse, pricingResponse).filter(x => x.billing === 'call').map(({ billing, ...x }) => x);
 }
 
-export async function refreshModelCatalog(id) {
+async function refreshModelCatalogUnlocked(id) {
   const db = readStore(); const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   const pricingAccount = pricingRequestAccount(account); const auth = pricingAuthType(pricingAccount);
@@ -325,6 +336,10 @@ export async function refreshModelCatalog(id) {
   return account.models;
 }
 
+export function refreshModelCatalog(id) {
+  return serializeAccountRun(id, () => refreshModelCatalogUnlocked(id));
+}
+
 export async function testModelConnection(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
@@ -340,7 +355,7 @@ export async function testModelConnection(id) {
   return { ok: true, model: account.modelName, latencyMs: Date.now() - started, usage: result.usage || null };
 }
 
-export async function refreshModelPrice(id) {
+async function refreshModelPriceUnlocked(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
@@ -357,6 +372,10 @@ export async function refreshModelPrice(id) {
   account.modelPriceCheckedAt = new Date().toISOString();
   writeStore(db);
   return account.modelPrice;
+}
+
+export function refreshModelPrice(id) {
+  return serializeAccountRun(id, () => refreshModelPriceUnlocked(id));
 }
 
 export function classifyCheckin(data) {
@@ -400,7 +419,7 @@ async function runGeneric(account, action) {
   return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, checkin };
 }
 
-export async function runAccount(id, action = 'poll') {
+async function runAccountUnlocked(id, action = 'poll') {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account || !account.enabled) throw new Error('账户不存在或已停用');
@@ -435,6 +454,10 @@ export async function runAccount(id, action = 'poll') {
   db.runs = db.runs.slice(0, 5000);
   writeStore(db);
   return account;
+}
+
+export function runAccount(id, action = 'poll') {
+  return serializeAccountRun(id, () => runAccountUnlocked(id, action));
 }
 
 export function shouldPoll(account, pollTags = []) {
