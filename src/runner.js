@@ -116,7 +116,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   if (shouldUseBrowserSession(account, panelType, retried)) {
     let browserError;
     try {
-      const token = await accessTokenInBrowser(account.baseUrl);
+      const token = await accessTokenInBrowser(account.baseUrl, account.browserLoginAction);
       if (token) {
         const previousBrowserAccessToken = account.browserAccessToken;
         account.browserAccessToken = encrypt(token);

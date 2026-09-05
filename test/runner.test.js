@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bearerTokenFromHeaders } from '../src/browser.js';
+import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
 import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
@@ -33,6 +33,11 @@ test('uses the persistent server browser as a fallback for generic session accou
 test('reads bearer tokens captured from browser network requests', () => {
   assert.equal(bearerTokenFromHeaders({ Authorization: 'Bearer browser-token' }), 'browser-token');
   assert.equal(bearerTokenFromHeaders({ authorization: 'Basic abc' }), '');
+});
+
+test('normalizes configured browser login button text', () => {
+  assert.equal(normalizeLoginActionText(' Sign up '), 'signup');
+  assert.equal(normalizeLoginActionText('SIGN-UP'), 'signup');
 });
 
 test('serializes concurrent balance and check-in runs for the same account', async () => {

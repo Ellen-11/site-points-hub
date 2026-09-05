@@ -61,6 +61,10 @@ export function bearerTokenFromHeaders(headers = {}) {
   return String(entry?.[1] || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
 }
 
+export function normalizeLoginActionText(value = '') {
+  return String(value).toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+}
+
 function storedTokenExpression() {
   return `(() => {
     const tokenPattern = /^(?:eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|[A-Za-z0-9_-]{24,})$/;
@@ -126,9 +130,61 @@ async function tokenFromTarget(target, reload = false) {
   }
 }
 
-export async function accessTokenInBrowser(baseUrl) {
+async function clickLoginAction(target, actionText) {
+  const expected = normalizeLoginActionText(actionText);
+  if (!expected) return { clicked: false, token: '' };
+  const client = await connectCdp(target.webSocketDebuggerUrl);
+  try {
+    await client.call('Runtime.enable');
+    await client.call('Network.enable');
+    let finish;
+    const captured = new Promise(resolve => { finish = resolve; });
+    const off = client.on('Network.requestWillBeSent', event => {
+      const token = bearerTokenFromHeaders(event?.request?.headers);
+      if (token) finish(token);
+    });
+    const expression = `(() => {
+      const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
+      const expected = ${JSON.stringify(expected)};
+      const elements = [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')];
+      const target = elements.find(element => !element.disabled && element.getClientRects().length && normalize(element.innerText || element.textContent || element.value || element.getAttribute('aria-label')) === expected);
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`;
+    const result = await client.call('Runtime.evaluate', { expression, returnByValue: true });
+    const clicked = result?.result?.value === true;
+    if (!clicked) { off(); return { clicked: false, token: '' }; }
+    const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 10000))]);
+    off();
+    return { clicked: true, token };
+  } finally {
+    client.close();
+  }
+}
+
+async function recoverTokenWithLoginAction(target, actionText, origin) {
+  const clicked = await clickLoginAction(target, actionText);
+  if (clicked.token) return clicked.token;
+  if (!clicked.clicked) return '';
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const targets = await existingOriginTargets(origin).catch(() => []);
+    for (const candidate of targets) {
+      const token = await tokenFromTarget(candidate, false).catch(() => '');
+      if (token) return token;
+    }
+  }
+  return '';
+}
+
+export async function accessTokenInBrowser(baseUrl, loginActionText = '') {
   const origin = new URL(baseUrl).origin;
   const existing = await existingOriginTargets(origin);
+  if (existing[0] && loginActionText) {
+    const token = await recoverTokenWithLoginAction(existing[0], loginActionText, origin);
+    if (token) return token;
+  }
   for (const target of existing) {
     const token = await tokenFromTarget(target, false);
     if (token) return token;
@@ -142,6 +198,10 @@ export async function accessTokenInBrowser(baseUrl) {
       await client.call('Runtime.enable');
       await waitForOrigin(client, origin);
     } finally { client.close(); }
+    if (loginActionText) {
+      const token = await recoverTokenWithLoginAction(target, loginActionText, origin);
+      if (token) return token;
+    }
     return await tokenFromTarget(target, true);
   } finally { await closeTarget(target.id); }
 }
