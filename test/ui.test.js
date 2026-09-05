@@ -62,6 +62,8 @@ test('server browser routes require the admin session', () => {
   assert.match(source, /validSession\(cookies\(req\)\.session, sessionSecret\)/);
   assert.match(dockerfile, /chromium/);
   assert.match(startup, /\/data\/browser-profile/);
+  assert.match(startup, /SingletonLock/);
+  assert.match(startup, /json\/version/);
   assert.match(startup, /x11vnc .* -localhost/);
 });
 

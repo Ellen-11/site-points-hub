@@ -1,7 +1,12 @@
 const cdpBase = process.env.BROWSER_CDP_URL || 'http://127.0.0.1:9222';
 
 async function cdpTarget(url) {
-  const response = await fetch(`${cdpBase}/json/new?${encodeURIComponent(url)}`, { method: 'PUT', signal: AbortSignal.timeout(10000) });
+  let response;
+  try {
+    response = await fetch(`${cdpBase}/json/new?${encodeURIComponent(url)}`, { method: 'PUT', signal: AbortSignal.timeout(10000) });
+  } catch (error) {
+    throw new Error(`服务器浏览器未启动：${error.cause?.code || error.message}`);
+  }
   if (!response.ok) throw new Error(`服务器浏览器不可用 (HTTP ${response.status})`);
   return response.json();
 }
