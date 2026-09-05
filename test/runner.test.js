@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
-  assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
+  const rotated = ['fresh', 'token'].join('-');
+  assert.equal(tokenFromRefresh({ success: true, data: { access_token: `Bearer ${rotated}` } }), rotated);
   assert.equal(refreshCookieFromHeaders(new Headers({ 'set-cookie': 'new_api_refresh=rotated; Path=/api/user/auth; HttpOnly' }), 'old'), 'new_api_refresh=rotated');
 });
 
@@ -20,7 +21,7 @@ test('recognizes login pages returned with a misleading HTTP 200', () => {
   assert.equal(isHtmlResponse('{"success":true}', 'application/json'), false);
 });
 
-test('serializes concurrent balance and check-in runs for the same account', async () => {
+test('serializes concurrent balance polling runs for the same account', async () => {
   const events = []; let releaseFirst;
   const first = serializeAccountRun('same-site', async () => {
     events.push('first-start');
@@ -48,12 +49,6 @@ test('recognizes pricing returned by the panel models endpoint', () => {
 test('formats New API quota units', () => {
   assert.equal(formatNewApiQuota(750000), '$1.50');
   assert.equal(formatNewApiQuota('bad'), '—');
-});
-
-test('classifies check-in business results', () => {
-  assert.deepEqual(classifyCheckin({ success: true, message: '签到成功' }), { status: 'ok', message: '签到成功' });
-  assert.deepEqual(classifyCheckin({ success: false, message: '今日已签到' }), { status: 'already', message: '今日已签到' });
-  assert.throws(() => classifyCheckin({ success: false, message: 'Token 无效' }), /Token 无效/);
 });
 
 test('formats quota using each site currency settings', () => {

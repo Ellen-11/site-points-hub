@@ -41,30 +41,27 @@ test('model picker preserves amount billing instead of forcing per-call', () => 
 
 test('custom bearer accounts can save automatic refresh settings', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   assert.match(html, /name="refreshPath"/);
   assert.match(html, /name="refreshCookie"/);
   assert.match(html, /遇到 401/);
   assert.match(html, /name="pricingCookie"/);
   assert.match(html, /name="modelBaseUrl"/);
   assert.match(html, /GET \/v1\/models/);
-  assert.match(html, /name="refreshMode"/);
-  assert.match(html, /服务器浏览器/);
-  assert.match(source, /\/browser-open/);
 });
 
-test('server browser routes require the admin session', () => {
-  const source = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+test('server browser feature is fully removed', () => {
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const runner = fs.readFileSync(new URL('../src/runner.js', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
-  const startup = fs.readFileSync(new URL('../start-container.sh', import.meta.url), 'utf8');
-  assert.match(source, /app\.get\('\/browser', auth/);
-  assert.match(source, /app\.use\('\/browser', auth/);
-  assert.match(source, /validSession\(cookies\(req\)\.session, sessionSecret\)/);
-  assert.match(dockerfile, /chromium/);
-  assert.match(startup, /\/data\/browser-profile/);
-  assert.match(startup, /SingletonLock/);
-  assert.match(startup, /json\/version/);
-  assert.match(startup, /x11vnc .* -localhost/);
+  assert.equal(fs.existsSync(new URL('../src/browser.js', import.meta.url)), false);
+  assert.equal(fs.existsSync(new URL('../start-container.sh', import.meta.url)), false);
+  assert.doesNotMatch(server, /browser-open|BROWSER_CDP_URL|BROWSER_WEB_ROOT|websockify|browserAvailable|openBrowserLogin/);
+  assert.doesNotMatch(runner, /\brefreshInBrowser\b|\brefreshMode\b/);
+  assert.doesNotMatch(html, /refreshMode|服务器浏览器/);
+  assert.doesNotMatch(source, /openServerBrowser|browser-open/);
+  assert.doesNotMatch(dockerfile, /chromium|xvfb|x11vnc|novnc|websockify/);
 });
 
 test('account save reports server validation errors and shows progress', () => {
@@ -114,8 +111,30 @@ test('batch actions visibly run tagged sites one by one', () => {
   assert.match(source, /async function runBatch/);
   assert.match(source, /for \(let index = 0; index < targets\.length/);
   assert.match(source, /正在.*\$\{index \+ 1\}\/\$\{targets\.length\}/);
-  assert.match(source, /const targets = activeFilter/);
+  assert.match(source, /const targets = currentVisible\(\)/);
   assert.match(source, /当前筛选下没有可执行的站点/);
+});
+
+test('check-in is recorded manually with a filter for unchecked sites', () => {
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const runner = fs.readFileSync(new URL('../src/runner.js', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(server, /checkin-record/);
+  assert.match(server, /checkinState: x\.checkinDate === today \? 'checked' : 'unchecked'/);
+  assert.doesNotMatch(server, /AUTO_CHECKIN_HOUR/);
+  assert.doesNotMatch(server, /runAll\('checkin'\)/);
+  assert.match(server, /req\.params\.action !== 'poll'/);
+  assert.doesNotMatch(server, /'already'/);
+  assert.doesNotMatch(runner, /classifyCheckin|checkinPath/);
+  assert.doesNotMatch(html, /name="checkinPath"/);
+  assert.doesNotMatch(html, /value="already"/);
+  assert.match(html, /id="filterCheckin"/);
+  assert.match(html, /id="uncheckAll"/);
+  assert.match(source, /recordCheckin/);
+  assert.match(source, /setCheckinFilter/);
+  assert.match(source, /account\.checkinState === checkinFilter/);
+  assert.doesNotMatch(source, /'checkin'\)/);
 });
 
 test('run logs distinguish gateway traffic', () => {
@@ -123,16 +142,12 @@ test('run logs distinguish gateway traffic', () => {
   assert.match(source, /run\.action === 'gateway' \? '网关'/);
 });
 
-test('left navigation opens a real gateway statistics module', () => {
+test('left navigation keeps only dashboard and run logs', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(html, /class="sidebar"/);
-  assert.match(html, />调用统计</);
-  assert.match(html, /id="trendChart"/);
-  assert.match(source, /\/api\/stats\?\$\{query\}/);
-  assert.match(html, /id="statsAccount"/);
-  assert.match(html, /id="statsModel"/);
-  assert.match(source, /class="success-bar"/);
+  assert.equal(fs.existsSync(new URL('../src/stats.js', import.meta.url)), false);
+  assert.doesNotMatch(html, /statsView|调用统计|trendChart|statsAccount|statsModel|ranking/);
+  assert.doesNotMatch(source, /loadStats|\/api\/stats/);
 });
 
 test('left navigation includes filterable run logs', () => {

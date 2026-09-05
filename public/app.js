@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
+let accounts = []; let tags = []; let dashboardData = null; let activeFilter = ''; let checkinFilter = '';
 
 async function api(url, options = {}) {
   const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, ...options });
@@ -42,67 +42,30 @@ function render(data) {
   $('#siteCount').textContent = data.accounts.length;
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
+  $('#uncheckedCount').textContent = data.accounts.filter(x => x.checkinState === 'unchecked').length;
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
   $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#filterTags').innerHTML = `<button class="tag-toggle ${activeFilter ? 'ghost' : 'active'}" onclick="setTagFilter('')">全部</button>` + allTags.map(tag => `<button class="tag-toggle ${activeFilter === tag ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="setTagFilter(this.dataset.tag)">${esc(tag)}</button>`).join('');
-  const visibleAccounts = activeFilter ? data.accounts.filter(account => (account.tags || []).includes(activeFilter)) : data.accounts;
+  $('#filterCheckin').innerHTML = [['', '全部'], ['checked', '已签到'], ['unchecked', '未签到']].map(([value, label]) => `<button class="tag-toggle ${checkinFilter === value ? 'active' : 'ghost'}" onclick="setCheckinFilter('${value}')">${label}</button>`).join('');
+  const visibleAccounts = data.accounts.filter(account => (!activeFilter || (account.tags || []).includes(activeFilter)) && (!checkinFilter || account.checkinState === checkinFilter));
   $('#cards').innerHTML = visibleAccounts.length ? visibleAccounts.map(a => `
     <article class="card" draggable="true" ondragstart="startAccountDrag(event,'${a.id}')" ondragover="dragAccountOver(event)" ondragleave="this.classList.remove('drag-over')" ondrop="dropAccount(event,'${a.id}')" ondragend="endAccountDrag(event)">
-      <div class="top"><strong>${esc(a.name)}</strong><span class="drag-handle" title="拖动排序">⋮⋮</span><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
+      <div class="top"><strong>${esc(a.name)}</strong><span class="drag-handle" title="拖动排序">⋮⋮</span><span class="checkin-badge ${a.checkinState === 'checked' ? 'checked' : 'unchecked'}" title="${a.checkinDate ? '记录日期 ' + esc(a.checkinDate) : '尚未记录签到'}">${a.checkinState === 'checked' ? '已签到' : '未签到'}</span><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
       <div class="site-tags">${(a.tags || []).map(tag => `<span>${esc(tag)}</span>`).join('') || '<span class="empty-tag">未设置标签</span>'}</div>
       <a class="site-link" href="${esc(a.baseUrl)}" target="_blank" rel="noopener noreferrer">打开站点 ↗</a>
-      ${a.refreshMode === 'browser' ? '<span class="browser-badge">服务器浏览器续期</span>' : ''}
       <div class="balance">${esc(a.balance ?? '—')}</div>
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
-      <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
-      <div class="card-actions"><button onclick="run('${a.id}','poll')">刷新</button><button class="secondary" onclick="run('${a.id}','checkin')">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button>${a.refreshMode === 'browser' ? `<button class="ghost" onclick="openServerBrowser('${a.id}')">浏览器登录</button>` : ''}<button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
-    </article>`).join('') : `<article class="panel"><p>${activeFilter ? '这个标签下还没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
+      <p class="meta">${a.lastError ? esc(a.lastError) : a.checkinState === 'checked' && a.checkinDate ? '签到记录于 ' + esc(a.checkinDate) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
+      <div class="card-actions">${a.checkinState === 'checked' ? `<button class="secondary" onclick="recordCheckin('${a.id}',false)">改记未签到</button>` : `<button class="secondary" onclick="recordCheckin('${a.id}',true)">记录已签到</button>`}<button onclick="run('${a.id}','poll')">刷新</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button><button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
+    </article>`).join('') : `<article class="panel"><p>${activeFilter || checkinFilter ? '当前筛选条件下没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
 }
 
 window.showView = view => {
   $('#dashboardView').classList.toggle('hidden', view !== 'dashboard');
-  $('#statsView').classList.toggle('hidden', view !== 'stats');
   $('#logsView').classList.toggle('hidden', view !== 'logs');
   document.querySelectorAll('.nav-button').forEach(button => button.classList.toggle('active', button.dataset.view === view));
-  if (view === 'stats') loadStats();
   if (view === 'logs') loadLogs();
-};
-
-window.loadStats = async () => {
-  try {
-    const range = Number($('#trendRange').value || 7);
-    const query = new URLSearchParams({ days: range, accountId: $('#statsAccount').value, modelName: $('#statsModel').value });
-    const data = await api(`/api/stats?${query}`);
-    const selectedAccount = $('#statsAccount').value; const selectedModel = $('#statsModel').value;
-    $('#statsAccount').innerHTML = '<option value="">全部站点</option>' + data.filters.accounts.map(account => `<option value="${esc(account.id)}">${esc(account.name)}</option>`).join('');
-    $('#statsModel').innerHTML = '<option value="">全部模型</option>' + data.filters.models.map(model => `<option value="${esc(model)}">${esc(model)}</option>`).join('');
-    $('#statsAccount').value = selectedAccount; $('#statsModel').value = selectedModel;
-    const accountLabel = data.filters.accounts.find(account => account.id === selectedAccount)?.name || '全部站点';
-    $('#statsScope').textContent = `当前范围：${accountLabel} · ${selectedModel || '全部模型'}`;
-    $('#statsUpdatedAt').textContent = `更新于 ${new Date(data.updatedAt).toLocaleTimeString()}`;
-    $('#todayRequests').textContent = data.today.requests.toLocaleString();
-    $('#todaySuccessRate').textContent = `${data.today.successRate}%`;
-    $('#monthRequests').textContent = data.month.requests.toLocaleString();
-    $('#allResults').textContent = `${data.all.successful.toLocaleString()} / ${data.all.failed.toLocaleString()}`;
-    $('#firstHitRate').textContent = `${data.all.firstHitRate}%`;
-    $('#switchCount').textContent = data.all.switched.toLocaleString();
-    $('#averageLatency').textContent = data.all.averageLatencyMs === null ? '—' : `${data.all.averageLatencyMs} ms`;
-    $('#p95Latency').textContent = data.all.p95LatencyMs === null ? '—' : `${data.all.p95LatencyMs} ms`;
-    $('#inputTokens').textContent = data.tokens.all.input.toLocaleString(); $('#todayInputTokens').textContent = `今日 ${data.tokens.today.input.toLocaleString()}`;
-    $('#outputTokens').textContent = data.tokens.all.output.toLocaleString(); $('#todayOutputTokens').textContent = `今日 ${data.tokens.today.output.toLocaleString()}`;
-    $('#cachedTokens').textContent = data.tokens.all.cached.toLocaleString(); $('#todayCachedTokens').textContent = `今日 ${data.tokens.today.cached.toLocaleString()}`;
-    $('#totalTokens').textContent = data.tokens.all.total.toLocaleString(); $('#measuredRequests').textContent = `${data.tokens.all.measured.toLocaleString()} 次返回用量`;
-    $('#trendTitle').textContent = `近 ${range} 天请求`;
-    const max = Math.max(1, ...data.days.map(day => day.requests));
-    $('#trendChart').innerHTML = data.days.map(day => `<div class="trend-day"><div class="trend-bar"><i style="height:${Math.max(day.requests ? 8 : 2, day.requests / max * 100)}%"></i></div><strong>${day.requests}</strong><span>${esc(day.date.slice(5))}</span></div>`).join('');
-    const rows = list => list.map((row, index) => `<div><b>${index + 1}</b><span><strong>${esc(row.name)}</strong><small>${row.attempts} 次尝试 · 成功 ${row.successful} · 失败 ${row.failed}</small><i class="success-bar"><u style="width:${row.successRate}%"></u></i></span><em>${row.successRate}%<small>${row.averageLatencyMs === null ? '—' : row.averageLatencyMs + ' ms'}</small></em></div>`).join('') || '<p>当前范围还没有网关调用记录。</p>';
-    $('#siteRanking').innerHTML = rows(data.sites);
-    $('#modelRanking').innerHTML = rows(data.models);
-    const compactRows = list => list.map((row, index) => `<div><b>${index + 1}</b><span><strong>${esc(row.name)}</strong></span><em>${row.count.toLocaleString()} 次</em></div>`).join('') || '<p>暂无记录。</p>';
-    $('#failureRanking').innerHTML = compactRows(data.failures);
-    $('#endpointRanking').innerHTML = compactRows(data.endpoints);
-  } catch (error) { alert(`统计加载失败：${error.message}`); }
 };
 
 window.loadLogs = async () => {
@@ -114,7 +77,7 @@ window.loadLogs = async () => {
     $('#logAccount').value = selected;
     $('#logResults').innerHTML = data.runs.map(run => {
       const action = run.action === 'gateway' ? '网关' : run.action === 'checkin' ? '签到' : '轮询';
-      const result = run.status === 'ok' ? '成功' : run.status === 'already' ? '已签到' : '失败';
+      const result = run.status === 'ok' ? '成功' : '失败';
       const usage = Number.isFinite(run.totalTokens) ? `输入 ${run.inputTokens || 0} · 输出 ${run.outputTokens || 0} · 缓存 ${run.cachedTokens || 0} · 总计 ${run.totalTokens}` : '';
       const details = [run.modelName, usage, Number.isFinite(run.latencyMs) ? `${run.latencyMs} ms` : '', run.statusCode ? `HTTP ${run.statusCode}` : ''].filter(Boolean).join(' · ');
       return `<article><time>${new Date(run.startedAt).toLocaleString()}</time><strong>${esc(run.accountName)}</strong><span class="log-kind">${action}</span><span class="${run.status}">${result}</span><p>${esc(details || run.message || '—')}</p></article>`;
@@ -124,6 +87,10 @@ window.loadLogs = async () => {
 for (const selector of ['#logAction', '#logStatus', '#logAccount']) document.addEventListener('change', event => { if (event.target.matches(selector)) loadLogs(); });
 
 window.setTagFilter = tag => { activeFilter = tag; render(dashboardData); };
+window.setCheckinFilter = state => { checkinFilter = state; render(dashboardData); };
+function currentVisible() {
+  return accounts.filter(account => (!activeFilter || (account.tags || []).includes(activeFilter)) && (!checkinFilter || account.checkinState === checkinFilter));
+}
 let draggedAccount = '';
 window.startAccountDrag = (event, id) => { draggedAccount = id; event.dataTransfer.effectAllowed = 'move'; event.currentTarget.classList.add('dragging'); };
 window.dragAccountOver = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; event.currentTarget.classList.add('drag-over'); };
@@ -131,7 +98,7 @@ window.endAccountDrag = event => { event.currentTarget.classList.remove('draggin
 window.dropAccount = async (event, targetId) => {
   event.preventDefault(); event.currentTarget.classList.remove('drag-over');
   if (!draggedAccount || draggedAccount === targetId) return;
-  const visible = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
+  const visible = currentVisible();
   const from = visible.findIndex(account => account.id === draggedAccount); const target = visible.findIndex(account => account.id === targetId);
   if (from < 0 || target < 0) return;
   const [moved] = visible.splice(from, 1); const rect = event.currentTarget.getBoundingClientRect();
@@ -182,15 +149,9 @@ $('#accountForm').onsubmit = async event => {
 
 window.edit = id => { const account = accounts.find(x => x.id === id), form = $('#accountForm'); form.reset(); $('#accountSaveError').textContent = ''; Object.entries(account).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ''; }); toggleFields(); $('#editor').showModal(); };
 window.run = async (id, action) => { try { await api(`/api/accounts/${id}/${action}`, { method: 'POST' }); } catch (error) { alert(error.message); } load(); };
-window.openServerBrowser = async id => {
-  const browserWindow = window.open('about:blank', 'sitePointsServerBrowser');
-  try {
-    await api(`/api/accounts/${id}/browser-open`, { method: 'POST' });
-    if (browserWindow) browserWindow.location = '/browser'; else location.href = '/browser';
-  } catch (error) {
-    browserWindow?.close();
-    alert(`服务器浏览器打开失败：${error.message}`);
-  }
+window.recordCheckin = async (id, checked) => {
+  try { await api(`/api/accounts/${id}/checkin-record`, { method: 'POST', body: JSON.stringify({ checked }) }); load(); }
+  catch (error) { alert(error.message); }
 };
 let taggingAccount = '';
 window.openTagPicker = id => {
@@ -257,14 +218,14 @@ window.deleteTag = async tag => {
 };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 async function runBatch(action, button) {
-  const targets = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
+  const targets = currentVisible();
   if (!targets.length) return alert('当前筛选下没有可执行的站点。');
   const original = button.textContent; let ok = 0; let failed = 0; button.disabled = true;
   try {
     for (let index = 0; index < targets.length; index += 1) {
       const account = targets[index];
       button.textContent = `${index + 1}/${targets.length} ${account.name}`;
-      $('#batchProgress').textContent = `正在${action === 'checkin' ? '签到' : '刷新'} ${index + 1}/${targets.length}：${account.name}`;
+      $('#batchProgress').textContent = `正在刷新 ${index + 1}/${targets.length}：${account.name}`;
       try { const result = await api(`/api/accounts/${account.id}/${action}`, { method: 'POST' }); result.lastStatus === 'error' ? failed += 1 : ok += 1; }
       catch { failed += 1; }
     }
@@ -272,6 +233,22 @@ async function runBatch(action, button) {
     await load();
   } finally { button.disabled = false; button.textContent = original; }
 }
+async function markBatch(checked, button) {
+  const targets = currentVisible();
+  if (!targets.length) return alert('当前筛选下没有可记录的站点。');
+  const original = button.textContent; button.disabled = true;
+  try {
+    for (let index = 0; index < targets.length; index += 1) {
+      const account = targets[index];
+      button.textContent = `${index + 1}/${targets.length} ${account.name}`;
+      $('#batchProgress').textContent = `正在${checked ? '记录已签到' : '记录未签到'} ${index + 1}/${targets.length}：${account.name}`;
+      await api(`/api/accounts/${account.id}/checkin-record`, { method: 'POST', body: JSON.stringify({ checked }) });
+    }
+    $('#batchProgress').textContent = `记录完成：共 ${targets.length} 个站点。`;
+    await load();
+  } finally { button.disabled = false; button.textContent = original; }
+}
 $('#pollAll').onclick = event => runBatch('poll', event.currentTarget);
-$('#checkinAll').onclick = event => runBatch('checkin', event.currentTarget);
+$('#checkinAll').onclick = event => markBatch(true, event.currentTarget);
+$('#uncheckAll').onclick = event => markBatch(false, event.currentTarget);
 load();

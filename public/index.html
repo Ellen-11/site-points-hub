@@ -5,33 +5,25 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260905-36">
+  <link rel="stylesheet" href="/style.css?v=20260905-40">
 </head>
 <body>
 <main>
-  <header><div><p class="eyebrow">SITE POINTS HUB</p><h1>站点积分台</h1><p>余额、签到和运行状态，一处看清。</p></div><button id="logout" class="ghost hidden">退出</button></header>
+  <header><div><p class="eyebrow">SITE POINTS HUB</p><h1>站点积分台</h1><p>余额、人工签到记录和运行状态，一处看清。</p></div><button id="logout" class="ghost hidden">退出</button></header>
   <section id="login" class="panel login"><h2>管理员登录</h2><form id="loginForm"><input name="password" type="password" placeholder="管理密码" required><button>进入控制台</button></form><p id="loginError" class="error"></p></section>
   <div id="app" class="hidden">
-    <aside class="sidebar"><strong>积分台</strong><button class="nav-button active" data-view="dashboard" onclick="showView('dashboard')">站点面板</button><button class="nav-button" data-view="stats" onclick="showView('stats')">调用统计</button><button class="nav-button" data-view="logs" onclick="showView('logs')">运行日志</button><a class="nav-button public-preview" href="/invites.html" target="_blank" rel="noopener">预览邀请页 ↗</a></aside>
+    <aside class="sidebar"><strong>积分台</strong><button class="nav-button active" data-view="dashboard" onclick="showView('dashboard')">站点面板</button><button class="nav-button" data-view="logs" onclick="showView('logs')">运行日志</button><a class="nav-button public-preview" href="/invites.html" target="_blank" rel="noopener">预览邀请页 ↗</a></aside>
     <div id="dashboardView" class="page-view">
-    <section class="stats"><article><span>站点</span><strong id="siteCount">0</strong></article><article><span>正常</span><strong id="okCount">0</strong></article><article><span>待处理</span><strong id="errorCount">0</strong></article></section>
+    <section class="stats"><article><span>站点</span><strong id="siteCount">0</strong></article><article><span>正常</span><strong id="okCount">0</strong></article><article><span>待处理</span><strong id="errorCount">0</strong></article><article><span>今日未签到</span><strong id="uncheckedCount">0</strong></article></section>
     <section class="poll-tags-panel"><div><h2>轮询标签</h2><p>先添加标签，再给具体站点选择标签；点亮的标签才参与轮询。</p></div><form id="addTagForm" class="add-tag-form"><input name="tag" maxlength="30" placeholder="新标签名称" required><button>＋ 添加标签</button></form><div id="pollTags" class="poll-tags"></div></section>
     <section class="filter-panel"><strong>标签筛选</strong><div id="filterTags" class="poll-tags"></div><span class="hint">筛选后直接拖动卡片，调整站点及轮询顺序。</span></section>
-    <div class="actions"><button id="pollAll">刷新筛选站点</button><button id="checkinAll" class="secondary">签到筛选站点</button><span id="batchProgress" class="batch-progress"></span><button id="add" class="ghost">＋ 添加站点</button></div>
+    <section class="filter-panel"><strong>签到筛选</strong><div id="filterCheckin" class="poll-tags"></div><span class="hint">签到由人工记录：在站点卡片上点“记录已签到 / 改记未签到”，每天默认回到未签到。</span></section>
+    <div class="actions"><button id="pollAll">刷新筛选站点</button><button id="checkinAll" class="secondary">标记筛选站点已签到</button><button id="uncheckAll" class="ghost">标记筛选站点未签到</button><span id="batchProgress" class="batch-progress"></span><button id="add" class="ghost">＋ 添加站点</button></div>
     <section id="cards" class="cards"></section>
-    </div>
-    <div id="statsView" class="page-view hidden">
-      <section class="stats-title"><div><p class="eyebrow">ACTUAL GATEWAY DATA</p><h2>调用统计</h2><p>只统计真实经过统一网关的请求，不估算金额。</p></div><div class="refresh-box"><small id="statsUpdatedAt">尚未刷新</small><button class="ghost" onclick="loadStats()">刷新统计</button></div></section>
-      <section class="panel stats-filters"><label>站点<select id="statsAccount" onchange="loadStats()"><option value="">全部站点</option></select></label><label>模型<select id="statsModel" onchange="loadStats()"><option value="">全部模型</option></select></label><p id="statsScope">当前范围：全部站点 · 全部模型</p></section>
-      <section class="stats gateway-summary"><article><span>今日请求</span><strong id="todayRequests">0</strong></article><article><span>今日成功率</span><strong id="todaySuccessRate">0%</strong></article><article><span>本月请求</span><strong id="monthRequests">0</strong></article><article><span>累计成功 / 失败</span><strong id="allResults">0 / 0</strong></article><article><span>首站命中率</span><strong id="firstHitRate">0%</strong></article><article><span>自动切换</span><strong id="switchCount">0</strong></article><article><span>平均耗时</span><strong id="averageLatency">—</strong></article><article><span>P95 耗时</span><strong id="p95Latency">—</strong></article></section>
-      <section class="token-summary"><article><span>输入 Token</span><strong id="inputTokens">0</strong><small id="todayInputTokens">今日 0</small></article><article><span>输出 Token</span><strong id="outputTokens">0</strong><small id="todayOutputTokens">今日 0</small></article><article><span>缓存 Token</span><strong id="cachedTokens">0</strong><small id="todayCachedTokens">今日 0</small></article><article><span>总 Token</span><strong id="totalTokens">0</strong><small id="measuredRequests">0 次返回用量</small></article></section>
-      <section class="panel stats-panel"><div class="panel-heading"><h2 id="trendTitle">近 7 天请求</h2><select id="trendRange" onchange="loadStats()"><option value="7">近 7 天</option><option value="30">近 30 天</option></select></div><div id="trendChart" class="trend-chart"></div></section>
-      <section class="ranking-grid"><section class="panel"><h2>站点排行</h2><div id="siteRanking" class="ranking"></div></section><section class="panel"><h2>模型排行</h2><div id="modelRanking" class="ranking"></div></section></section>
-      <section class="ranking-grid"><section class="panel"><h2>失败原因</h2><div id="failureRanking" class="ranking compact-ranking"></div></section><section class="panel"><h2>接口分布</h2><div id="endpointRanking" class="ranking compact-ranking"></div></section></section>
     </div>
     <div id="logsView" class="page-view hidden">
       <section class="stats-title"><div><p class="eyebrow">RUN HISTORY</p><h2>运行日志</h2><p>查看网关、余额轮询和签到的真实执行记录。</p></div><button class="ghost" onclick="loadLogs()">刷新日志</button></section>
-      <section class="panel log-filters"><label>类型<select id="logAction"><option value="">全部类型</option><option value="gateway">网关</option><option value="poll">轮询</option><option value="checkin">签到</option></select></label><label>结果<select id="logStatus"><option value="">全部结果</option><option value="ok">成功</option><option value="error">失败</option><option value="already">已签到</option></select></label><label>站点<select id="logAccount"><option value="">全部站点</option></select></label></section>
+      <section class="panel log-filters"><label>类型<select id="logAction"><option value="">全部类型</option><option value="gateway">网关</option><option value="poll">轮询</option><option value="checkin">签到</option></select></label><label>结果<select id="logStatus"><option value="">全部结果</option><option value="ok">成功</option><option value="error">失败</option></select></label><label>站点<select id="logAccount"><option value="">全部站点</option></select></label></section>
       <section class="panel logs-panel"><div id="logResults" class="log-results"></div></section>
     </div>
   </div>
@@ -50,12 +42,10 @@
     <div id="simpleFields"><div class="grid"><label>用户 ID<input name="userId" placeholder="个人中心显示的数字 ID"></label><label>登录 Cookie<input name="credential" class="credential" type="password" placeholder="留空则保留原 Cookie"></label></div><p class="hint">自动使用 Cookie + New-Api-User 请求头，并读取站点货币设置。</p></div>
     <div id="advancedFields" class="hidden">
       <div class="grid"><label>余额接口<input name="balancePath" placeholder="/api/user"></label><label>余额字段<input name="balanceField" value="balance" placeholder="data.points"></label></div>
-      <div class="grid"><label>余额除数<input name="balanceDivisor" value="1" inputmode="decimal"></label><label>签到接口<input name="checkinPath" placeholder="/api/checkin"></label></div>
-      <div class="grid"><label>请求方式<select name="checkinMethod"><option>POST</option><option>GET</option></select></label><label>认证方式<select name="authType"><option value="bearer">Bearer Token</option><option value="cookie">Cookie</option><option value="header">自定义请求头</option></select></label></div>
+      <div class="grid"><label>余额除数<input name="balanceDivisor" value="1" inputmode="decimal"></label><label>认证方式<select name="authType"><option value="bearer">Bearer Token</option><option value="cookie">Cookie</option><option value="header">自定义请求头</option></select></label></div>
       <div class="grid"><label>自定义头名称<input name="headerName" placeholder="x-api-key"></label><label>凭据<input name="genericCredential" class="credential" type="password" placeholder="留空则保留原凭据"></label></div>
       <div class="grid"><label>刷新接口<input name="refreshPath" placeholder="/api/user/auth/refresh"></label><label>刷新 Cookie<input name="refreshCookie" class="credential" type="password" placeholder="new_api_refresh=…，留空则保留"></label></div>
-      <label>续期方式<select name="refreshMode"><option value="http">普通接口刷新</option><option value="browser">服务器浏览器（需远程登录一次）</option></select></label>
-      <p class="hint">遇到 401 时自动续期。普通刷新会从 Zeabur 携带上面的 Cookie；若站点绑定登录 IP，可选择服务器浏览器，然后在站点卡片点击“浏览器登录”。</p>
+      <p class="hint">遇到 401 时自动续期，会携带上面的刷新 Cookie 调用刷新接口，并保存轮换后的凭据。</p>
     </div>
     <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
     <p class="hint">所有面板类型都可填写；仅用于读取模型价格，不影响余额、签到和网关认证。</p>
@@ -78,6 +68,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260905-36"></script>
+<script src="/app.js?v=20260905-40"></script>
 </body>
 </html>

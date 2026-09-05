@@ -1,7 +1,6 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
-import { refreshInBrowser } from './browser.js';
 
 const accountRunQueues = new Map();
 
@@ -54,13 +53,6 @@ export function refreshCookieFromHeaders(headers, fallback = '') {
 
 async function refreshBearer(account) {
   if (account.authType !== 'bearer' || !account.refreshPath) return false;
-  if (account.refreshMode === 'browser') {
-    const data = await refreshInBrowser(account.baseUrl, account.refreshPath);
-    const token = tokenFromRefresh(data);
-    if (!token) throw new Error('服务器浏览器刷新成功，但响应中没有新的 Access Token');
-    account.credential = encrypt(token);
-    return true;
-  }
   if (!account.refreshCookie) return false;
   const url = await safeUrl(account.baseUrl, account.refreshPath);
   const currentCookie = decrypt(account.refreshCookie);
@@ -411,36 +403,19 @@ export function refreshModelPrice(id) {
   return serializeAccountRun(id, () => refreshModelPriceUnlocked(id));
 }
 
-export function classifyCheckin(data) {
-  const message = String(data?.message ?? data?.msg ?? '').trim();
-  const already = /已签到|已经签到|重复签到|already\s*(checked|signed)|checked\s*in/i.test(message);
-  if (already) return { status: 'already', message: message || '今日已签到' };
-  if (data?.success === false || data?.ok === false || (typeof data?.code === 'number' && data.code !== 0 && data.code !== 200)) {
-    throw new Error(message || '站点返回签到失败');
-  }
-  return { status: 'ok', message: message || '签到成功' };
-}
-
-async function runNewApi(account, action) {
+async function runNewApi(account) {
   if (!account.userId) throw new Error('请填写用户 ID');
   if (!account.credential) throw new Error('请填写登录 Cookie');
-  let checkin;
-  if (action === 'checkin') checkin = classifyCheckin(await call(account, '/api/user/checkin', 'POST', 'newapi'));
   let config = {};
   try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
   const rawBalance = readRemainingQuota(data);
   if (rawBalance === undefined) throw new Error(data?.message || '余额响应中没有 data.quota');
   const quotaPerUnit = Number(findConfig(config, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
-  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit, checkin };
+  return { balance: formatQuota(rawBalance, config, account.currency || 'auto'), rawBalance, quotaPerUnit };
 }
 
-async function runGeneric(account, action) {
-  let checkin;
-  if (action === 'checkin') {
-    if (!account.checkinPath) throw new Error('尚未配置签到接口');
-    checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
-  }
+async function runGeneric(account) {
   if (!account.balancePath) throw new Error('尚未配置余额接口；模型与价格功能仍可使用');
   const data = await call(account, account.balancePath, 'GET');
   const raw = readConfiguredBalance(data, account.balanceField || 'balance');
@@ -449,10 +424,10 @@ async function runGeneric(account, action) {
   const amount = divisor !== 1 && Number.isFinite(Number(raw)) ? Number(raw) / divisor : raw;
   const prefix = account.currency === 'cny' ? '¥' : account.currency === 'usd' ? '$' : '';
   const balance = Number.isFinite(Number(amount)) ? `${prefix}${Number(amount).toFixed(2)}` : String(amount ?? '—');
-  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1, checkin };
+  return { balance, rawBalance: Number.isFinite(Number(raw)) ? Number(raw) : null, quotaPerUnit: divisor || 1 };
 }
 
-async function runAccountUnlocked(id, action = 'poll') {
+async function runAccountUnlocked(id) {
   const db = readStore();
   const account = db.accounts.find(x => x.id === id);
   if (!account || !account.enabled) throw new Error('账户不存在或已停用');
@@ -462,7 +437,7 @@ async function runAccountUnlocked(id, action = 'poll') {
   let run;
   try {
     const panelType = account.panelType === 'generic' ? 'generic' : 'newapi';
-    const result = panelType === 'newapi' ? await runNewApi(account, action) : await runGeneric(account, action);
+    const result = panelType === 'newapi' ? await runNewApi(account) : await runGeneric(account);
     account.balance = result.balance;
     account.balanceRaw = result.rawBalance;
     account.quotaPerUnit = result.quotaPerUnit || account.quotaPerUnit || 500000;
@@ -475,22 +450,17 @@ async function runAccountUnlocked(id, action = 'poll') {
     account.lastStatus = 'ok';
     account.lastError = '';
     account.lastCheckedAt = new Date().toISOString();
-    if (action === 'checkin') {
-      account.lastCheckinAt = account.lastCheckedAt;
-      account.lastCheckinStatus = result.checkin.status;
-      account.lastCheckinMessage = result.checkin.message;
-    }
-    run = { id: crypto.randomUUID(), accountId: id, action, status: result.checkin?.status || 'ok', message: result.checkin?.message || '', startedAt };
+    run = { id: crypto.randomUUID(), accountId: id, action: 'poll', status: 'ok', message: '', startedAt };
   } catch (error) {
     account.lastStatus = 'error';
     account.lastError = error.message;
     account.lastCheckedAt = new Date().toISOString();
-    run = { id: crypto.randomUUID(), accountId: id, action, status: 'error', message: error.message, startedAt };
+    run = { id: crypto.randomUUID(), accountId: id, action: 'poll', status: 'error', message: error.message, startedAt };
   }
   return mutateStore(latest => {
     const saved = latest.accounts.find(x => x.id === id);
     if (saved) {
-      for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt', 'lastCheckinAt', 'lastCheckinStatus', 'lastCheckinMessage']) {
+      for (const field of ['balance', 'balanceRaw', 'quotaPerUnit', 'detectedType', 'lastStatus', 'lastError', 'lastCheckedAt']) {
         if (Object.hasOwn(account, field)) saved[field] = account[field];
       }
       if (saved.modelPrice?.type === 'per_call') {
@@ -507,8 +477,8 @@ async function runAccountUnlocked(id, action = 'poll') {
   });
 }
 
-export function runAccount(id, action = 'poll') {
-  return serializeAccountRun(id, () => runAccountUnlocked(id, action));
+export function runAccount(id) {
+  return serializeAccountRun(id, () => runAccountUnlocked(id));
 }
 
 export function shouldPoll(account, pollTags = []) {
@@ -516,12 +486,12 @@ export function shouldPoll(account, pollTags = []) {
   return account.enabled && Array.isArray(account.tags) && account.tags.some(tag => enabledTags.has(tag));
 }
 
-export async function runAll(action = 'poll') {
+export async function runAll() {
   const db = readStore();
   const ids = db.accounts.filter(account => shouldPoll(account, db.pollTags || [])).map(x => x.id);
   const results = [];
   for (const id of ids) {
-    try { results.push({ status: 'fulfilled', value: await runAccount(id, action) }); }
+    try { results.push({ status: 'fulfilled', value: await runAccount(id) }); }
     catch (reason) { results.push({ status: 'rejected', reason }); }
   }
   return results;
