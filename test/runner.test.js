@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelApiUrl, modelCategory, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -119,6 +119,12 @@ test('keeps models selectable when the panel has no pricing endpoint', () => {
   assert.deepEqual(buildModelCatalog({ data: [{ id: 'gpt-direct' }] }, { data: [] }), [{
     name: 'gpt-direct', category: 'GPT', billing: 'token', price: null, text: '价格未知 · 可正常选择和测试'
   }]);
+});
+
+test('builds the available model list from pricing when v1 models is unauthorized', () => {
+  assert.deepEqual(modelsFromPricing({ data: [{ model_name: 'gpt-priced' }, { model_name: 'claude-priced' }] }), {
+    data: [{ id: 'gpt-priced' }, { id: 'claude-priced' }]
+  });
 });
 
 test('estimates remaining uses for per-call models', () => {

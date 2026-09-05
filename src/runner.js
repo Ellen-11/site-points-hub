@@ -237,6 +237,11 @@ export function hasModelPricing(response) {
   return list.some(item => item && typeof item === 'object' && (item.model_price !== undefined || item.model_ratio !== undefined || item.quota_type !== undefined || item.priceValue !== undefined || item.priceLabel !== undefined));
 }
 
+export function modelsFromPricing(response) {
+  const list = Array.isArray(response?.data?.models) ? response.data.models : Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+  return { data: list.map(item => ({ id: item?.model_name || item?.name })).filter(item => item.id) };
+}
+
 async function loadModelPricing(account, auth) {
   const paths = ['/api/pricing', '/api/models/pricing', '/api/models']; const errors = [];
   for (const path of paths) {
@@ -287,7 +292,9 @@ export async function refreshModelCatalog(id) {
   const db = readStore(); const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   const pricingAccount = pricingRequestAccount(account); const auth = pricingAuthType(pricingAccount);
-  const models = await callApiKey(account, '/v1/models');
+  let models = null; let modelsError = '';
+  try { models = await callApiKey(account, '/v1/models'); }
+  catch (error) { modelsError = error.message; }
   let pricing = { data: [] };
   try {
     pricing = await loadModelPricing(pricingAccount, auth);
@@ -295,6 +302,8 @@ export async function refreshModelCatalog(id) {
   } catch (error) {
     account.modelPricingError = error.message;
   }
+  if (!models) models = modelsFromPricing(pricing);
+  if (!models.data?.length) throw new Error(`无法拉取模型：${modelsError || '模型列表和价格列表均为空'}`);
   let status = {};
   try { status = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const quotaPerUnit = Number(findConfig(status, ['quota_per_unit', 'quotaPerUnit', 'QuotaPerUnit'])) || 500000;
