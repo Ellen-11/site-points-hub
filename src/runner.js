@@ -91,8 +91,9 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
   return !retried && panelType !== 'public' && account.refreshMode === 'browser';
 }
 
-function browserAuthHeaders(account, panelType) {
+function browserAuthHeaders(account, panelType, includeCredential = false) {
   if (panelType === 'newapi') return { 'new-api-user': String(account.userId || '') };
+  if (!includeCredential) return {};
   const token = decrypt(account.credential);
   if (account.authType === 'bearer') return { authorization: `Bearer ${token}` };
   if (account.authType === 'header') return { [account.headerName || 'authorization']: token };
@@ -110,13 +111,23 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
     }
   }
   if (shouldUseBrowserSession(account, panelType, retried)) {
+    let browserError;
     try {
       const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType));
       return { data };
     } catch (error) {
-      if (refreshError) throw new Error(`浏览器登录态请求失败：${error.message}；刷新接口：${refreshError.message}`);
-      throw error;
+      browserError = error;
     }
+    if (panelType === 'generic' && account.credential && ['bearer', 'header'].includes(account.authType)) {
+      try {
+        const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true));
+        return { data };
+      } catch (error) {
+        browserError = error;
+      }
+    }
+    const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
+    throw new Error(`服务器浏览器登录态无效，请点击“浏览器登录”重新登录：${browserError.message}${details}`);
   }
   if (refreshError) throw refreshError;
   return null;
