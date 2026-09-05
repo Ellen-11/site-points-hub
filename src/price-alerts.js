@@ -9,6 +9,12 @@ export function canonicalModelName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
+export function comparableModelName(name) {
+  const canonical = canonicalModelName(name);
+  const parts = canonical.split('-').filter(Boolean);
+  return parts.length >= 3 ? parts.slice(0, 3).join('-') : canonical;
+}
+
 export function normalizedPerCallPrice(account, model) {
   if (model?.billing !== 'call') return null;
   const price = Number(model.price);
@@ -24,10 +30,10 @@ export function buildPriceLeaders(accounts = []) {
   const leaders = new Map();
   for (const account of accounts) {
     for (const model of account.models || []) {
-      const key = canonicalModelName(model.name);
+      const key = comparableModelName(model.name);
       const priceUsd = normalizedPerCallPrice(account, model);
       if (!key || priceUsd === null) continue;
-      const candidate = { key, modelName: model.name, priceUsd, accountId: account.id, accountName: account.name, checkedAt: account.modelsCheckedAt || null };
+      const candidate = { key, comparisonName: key, modelName: model.name, priceUsd, accountId: account.id, accountName: account.name, checkedAt: account.modelsCheckedAt || null };
       const current = leaders.get(key);
       if (!current || candidate.priceUsd < current.priceUsd || (candidate.priceUsd === current.priceUsd && candidate.accountName.localeCompare(current.accountName) < 0)) leaders.set(key, candidate);
     }
@@ -43,12 +49,14 @@ export function updatePriceWatchState(db, leaders, now = new Date()) {
   const alerts = Array.isArray(previous.alerts) ? previous.alerts : [];
   const created = [];
   for (const current of leaders) {
-    const old = oldLeaders[current.key];
+    const old = oldLeaders[current.key] || Object.values(oldLeaders)
+      .filter(item => comparableModelName(item.modelName) === current.key)
+      .sort((a, b) => a.priceUsd - b.priceUsd)[0];
     const isNewModel = initialized && !old;
     const isCheaper = old && current.priceUsd < old.priceUsd - 1e-12;
     if (!isNewModel && !isCheaper) continue;
     created.push({
-      id: crypto.randomUUID(), unread: true, kind: isNewModel ? 'new' : 'drop', modelName: current.modelName,
+      id: crypto.randomUUID(), unread: true, kind: isNewModel ? 'new' : 'drop', comparisonName: current.key, modelName: current.modelName,
       oldPriceUsd: old?.priceUsd ?? null, newPriceUsd: current.priceUsd,
       oldAccountName: old?.accountName || '', accountId: current.accountId, accountName: current.accountName,
       detectedAt: now.toISOString()
