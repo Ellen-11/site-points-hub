@@ -37,6 +37,8 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /name="refreshCookie"/);
   assert.match(html, /遇到 401/);
   assert.match(html, /name="pricingCookie"/);
+  assert.match(html, /name="modelBaseUrl"/);
+  assert.match(html, /GET \/v1\/models/);
 });
 
 test('account save reports server validation errors and shows progress', () => {

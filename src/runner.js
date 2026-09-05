@@ -175,9 +175,16 @@ export function modelCategory(name) {
   return '其他';
 }
 
+export async function modelApiUrl(account, endpoint) {
+  const base = String(account.modelBaseUrl || account.baseUrl || '').trim().replace(/\/+$/, '');
+  if (!base) throw new Error('请填写模型 API 地址');
+  const suffix = /\/v1$/i.test(base) ? String(endpoint).replace(/^\/v1/i, '') : endpoint;
+  return safeUrl(`${base}/`, String(suffix).replace(/^\//, ''));
+}
+
 async function callApiKey(account, endpoint, options = {}) {
   if (!account.apiKey) throw new Error('请先填写该站 API Key');
-  const url = await safeUrl(account.baseUrl, endpoint);
+  const url = await modelApiUrl(account, endpoint);
   const response = await fetch(url, {
     method: options.method || 'GET',
     headers: { authorization: `Bearer ${decrypt(account.apiKey)}`, accept: 'application/json', 'content-type': 'application/json', 'user-agent': 'SitePointsHub/1.0' },
@@ -190,7 +197,7 @@ async function callApiKey(account, endpoint, options = {}) {
 }
 
 export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit = 500000) {
-  const available = new Set((modelsResponse?.data || []).map(x => x.id));
+  const available = new Set((modelsResponse?.data || []).map(x => typeof x === 'string' ? x : x.id).filter(Boolean));
   const customPricing = Array.isArray(pricingResponse?.data?.models);
   const prices = customPricing
     ? pricingResponse.data.models.map(x => ({

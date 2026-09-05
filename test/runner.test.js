@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelCategory, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, modelApiUrl, modelCategory, pricingAuthType, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, shouldPoll, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -64,6 +64,11 @@ test('pricing can use a dedicated cookie without changing balance auth', () => {
   assert.equal(pricing.authType, 'cookie');
   assert.equal(pricing.credential, 'encrypted-cookie');
   assert.equal(account.authType, 'bearer');
+});
+
+test('direct model API accepts both host and v1 base addresses', async () => {
+  assert.equal((await modelApiUrl({ baseUrl: 'https://example.com' }, '/v1/models')).href, 'https://example.com/v1/models');
+  assert.equal((await modelApiUrl({ baseUrl: 'https://site.example', modelBaseUrl: 'https://example.com/v1' }, '/v1/models')).href, 'https://example.com/v1/models');
 });
 
 test('only sites with an enabled tag participate in polling', () => {

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { decrypt, readStore, writeStore } from './store.js';
-import { safeUrl, shouldPoll } from './runner.js';
+import { modelApiUrl, shouldPoll } from './runner.js';
 
 function authorized(req) {
   const expected = process.env.GATEWAY_API_KEY || '';
@@ -71,7 +71,7 @@ export function recordGatewayRun(account, status, message = '', details = {}) {
 }
 
 async function upstreamRequest(account, endpoint, body) {
-  const url = await safeUrl(account.baseUrl, endpoint);
+  const url = await modelApiUrl(account, endpoint);
   return fetch(url, {
     method: 'POST',
     headers: {
