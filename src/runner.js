@@ -83,6 +83,10 @@ export function isExpiredAuthentication(status, data) {
   return status === 401 || status === 403 || /unauthorized|invalid\s+(access\s+)?token|not\s+logged\s+in|登录已?失效|未登录|请先登录/i.test(message);
 }
 
+export function isHtmlResponse(text, contentType = '') {
+  return /text\/html/i.test(contentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(String(text));
+}
+
 async function call(account, endpoint, method, panelType = 'generic', retried = false) {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
@@ -100,10 +104,17 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
     if (account.authType === 'cookie') headers.cookie = token;
     if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
   }
-  const response = await fetch(url, { method, headers, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const response = await fetch(url, { method, headers, redirect: 'manual', signal: AbortSignal.timeout(15000) });
   const text = await response.text();
   let data;
-  try { data = JSON.parse(text); } catch { throw new Error(/^\s*</.test(text) ? `接口返回网页而不是 JSON (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`); }
+  try { data = JSON.parse(text); } catch {
+    const html = isHtmlResponse(text, response.headers.get('content-type') || '');
+    const loginRedirect = response.status >= 300 && response.status < 400;
+    if ((html || loginRedirect) && !retried && panelType === 'generic' && await refreshBearer(account)) {
+      return call(account, endpoint, method, panelType, true);
+    }
+    throw new Error(html ? `接口返回网页而不是 JSON (HTTP ${response.status})` : loginRedirect ? `接口重定向到登录页面 (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`);
+  }
   if (isExpiredAuthentication(response.status, data) && !retried && panelType === 'generic' && await refreshBearer(account)) {
     return call(account, endpoint, method, panelType, true);
   }
