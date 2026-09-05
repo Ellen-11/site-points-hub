@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260906-53">
+  <link rel="stylesheet" href="/style.css?v=20260906-54">
 </head>
 <body>
 <main>
@@ -73,7 +73,7 @@
     <label>登录保持方式<select name="refreshMode"><option value="http">使用已填写的 Cookie / Token</option><option value="browser">服务器浏览器（需远程登录一次）</option></select></label>
     <p class="hint">所有面板类型都可使用。遇到 401 时，Bearer 会先自动换取新 Token；Session/Cookie 失效、跳转登录页或普通请求被拦截时，会直接借用服务器浏览器里的登录状态重试。选择服务器浏览器后，请先在站点卡片点击“浏览器登录”。</p>
     <label>失效后自动点击的登录按钮<input name="browserLoginAction" placeholder="例如 Sign in；留空可使用服务器环境变量"></label>
-    <p class="hint">自动登录账号密码只从服务器环境变量读取。单站设置 BROWSER_LOGIN_ACCOUNT、BROWSER_LOGIN_ACTION、BROWSER_LOGIN_USERNAME、BROWSER_LOGIN_PASSWORD，需要勾协议时再加 BROWSER_LOGIN_AGREE=true；多站使用 BROWSER_LOGIN_ACCOUNTS_JSON，并在对应站点中加入 agree:true。验证码或人机验证仍需手动登录。</p>
+    <p class="hint">自动登录资料只从服务器环境变量读取。完整顺序：先点登录入口，再填写账号密码、勾选协议，最后点击登录提交并抓取新令牌。单站设置 BROWSER_LOGIN_ACCOUNT、BROWSER_LOGIN_ACTION、BROWSER_LOGIN_USERNAME、BROWSER_LOGIN_PASSWORD，需要协议时再加 BROWSER_LOGIN_AGREE=true；多站使用 BROWSER_LOGIN_ACCOUNTS_JSON 并加入 agree:true。</p>
     <label>价格 Cookie<input name="pricingCookie" class="credential" type="password" placeholder="完整 session=…；仅价格接口使用，留空则保留"></label>
     <p class="hint">所有面板类型都可填写；仅用于读取模型价格，不影响余额、签到和网关认证。</p>
     <h2 class="form-section">模型价格</h2>
@@ -95,6 +95,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-53"></script>
+<script src="/app.js?v=20260906-54"></script>
 </body>
 </html>

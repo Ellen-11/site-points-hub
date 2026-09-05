@@ -155,26 +155,6 @@ async function performLoginAction(target, options = {}) {
       const token = bearerTokenFromHeaders(event?.request?.headers);
       if (token) finish(token);
     });
-    if (options.agree) {
-      const agreementExpression = `(() => {
-        const words = /agree|agreement|terms|privacy|consent|read|同意|协议|隐私|条款/i;
-        const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
-        for (const checkbox of checkboxes) {
-          const label = [...document.querySelectorAll('label')].find(item => item.htmlFor && item.htmlFor === checkbox.id) || checkbox.closest('label');
-          const container = label || checkbox.parentElement;
-          if (!words.test(container?.textContent || '')) continue;
-          if (checkbox.checked) return true;
-          (label || checkbox).click();
-          return true;
-        }
-        const custom = [...document.querySelectorAll('[role="checkbox"]')].find(element => words.test((element.closest('label') || element.parentElement || element).textContent || ''));
-        if (!custom) return false;
-        if (custom.getAttribute('aria-checked') !== 'true') custom.click();
-        return true;
-      })()`;
-      const agreed = await evaluateUntil(client, agreementExpression, 10);
-      if (agreed) await new Promise(resolve => setTimeout(resolve, 500));
-    }
     const clickExpression = `(() => {
       const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
       const expected = ${JSON.stringify(expected)};
@@ -206,12 +186,35 @@ async function performLoginAction(target, options = {}) {
       })()`;
       const filled = await evaluateUntil(client, fillExpression, 20);
       if (filled) {
+        if (options.agree) {
+          const agreementExpression = `(() => {
+            const words = /agree|agreement|terms|privacy|consent|read|同意|协议|隐私|条款/i;
+            const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
+            for (const checkbox of checkboxes) {
+              const label = [...document.querySelectorAll('label')].find(item => item.htmlFor && item.htmlFor === checkbox.id) || checkbox.closest('label');
+              const container = label || checkbox.parentElement;
+              if (!words.test(container?.textContent || '')) continue;
+              if (checkbox.checked) return true;
+              (label || checkbox).click();
+              return true;
+            }
+            const custom = [...document.querySelectorAll('[role="checkbox"]')].find(element => words.test((element.closest('label') || element.parentElement || element).textContent || ''));
+            if (!custom) return false;
+            if (custom.getAttribute('aria-checked') !== 'true') custom.click();
+            return true;
+          })()`;
+          const agreed = await evaluateUntil(client, agreementExpression, 10);
+          if (agreed) await new Promise(resolve => setTimeout(resolve, 500));
+        }
         await new Promise(resolve => setTimeout(resolve, 500));
         const submitExpression = `(() => {
+          const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
+          const expected = ${JSON.stringify(expected)};
           const password = [...document.querySelectorAll('input[type="password"]')].find(element => element.getClientRects().length);
           if (!password) return false;
           const form = password.form || password.closest('form');
-          const submit = [...(form || document).querySelectorAll('button[type="submit"],input[type="submit"],button')].find(element => !element.disabled && element.getClientRects().length);
+          const buttons = [...(form || document).querySelectorAll('button[type="submit"],input[type="submit"],button')].filter(element => !element.disabled && element.getClientRects().length);
+          const submit = buttons.find(element => normalize(element.innerText || element.textContent || element.value || element.getAttribute('aria-label')) === expected) || buttons[0];
           if (submit) { submit.click(); return true; }
           if (form?.requestSubmit) { form.requestSubmit(); return true; }
           return false;
