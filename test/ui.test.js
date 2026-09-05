@@ -33,8 +33,10 @@ test('dashboard accepts accounts without a selected model price', () => {
 
 test('model picker preserves amount billing instead of forcing per-call', () => {
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
-  assert.match(source, /preferredBilling/);
-  assert.doesNotMatch(source, /activeBilling = 'call';\s*setBilling\('call'\)/);
+  assert.match(source, /localStorage\.getItem\('modelBilling'\)/);
+  assert.match(source, /localStorage\.setItem\('modelBilling', billing\)/);
+  assert.match(source, /setBilling\(activeBilling\)/);
+  assert.doesNotMatch(source, /preferredBilling/);
 });
 
 test('custom bearer accounts can save automatic refresh settings', () => {

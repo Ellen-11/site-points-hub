@@ -194,7 +194,8 @@ $('#tagPickerForm').onsubmit = async event => {
   $('#tagPicker').close(); load();
 };
 $('#closeTags').onclick = () => $('#tagPicker').close();
-let pickingAccount = ''; let pickedModels = []; let activeBilling = 'call';
+let pickingAccount = ''; let pickedModels = [];
+let activeBilling = localStorage.getItem('modelBilling') === 'token' ? 'token' : 'call';
 function showCategory(category) {
   document.querySelectorAll('.category-button').forEach(button => button.classList.toggle('active', button.dataset.category === category));
   const models = pickedModels.filter(model => model.billing === activeBilling && model.category === category);
@@ -210,7 +211,7 @@ function renderCategories() {
   $('#modelChoices').innerHTML = '';
   if (categories.length) showCategory(categories[0]);
 }
-window.setBilling = billing => { activeBilling = billing; document.querySelectorAll('.billing-button').forEach(button => { const active = button.dataset.billing === billing; button.classList.toggle('active', active); button.classList.toggle('ghost', !active); }); renderCategories(); };
+window.setBilling = billing => { activeBilling = billing; localStorage.setItem('modelBilling', billing); document.querySelectorAll('.billing-button').forEach(button => { const active = button.dataset.billing === billing; button.classList.toggle('active', active); button.classList.toggle('ghost', !active); }); renderCategories(); };
 window.openModels = async id => {
   pickingAccount = id;
   const account = accounts.find(x => x.id === id);
@@ -221,10 +222,7 @@ window.openModels = async id => {
   $('#modelPicker').showModal();
   try {
     pickedModels = (await api(`/api/accounts/${id}/models`, { method: 'POST' })).models;
-    const preferredBilling = pickedModels.some(model => model.billing === activeBilling)
-      ? activeBilling
-      : pickedModels.some(model => model.billing === 'call') ? 'call' : 'token';
-    setBilling(preferredBilling);
+    setBilling(activeBilling);
   } catch (error) { $('#modelCategories').innerHTML = `<p class="error">${esc(error.message)}</p>`; }
 };
 window.showCategory = showCategory;
