@@ -1,7 +1,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
-import { refreshInBrowser, requestInBrowser } from './browser.js';
+import { accessTokenInBrowser, refreshInBrowser, requestInBrowser } from './browser.js';
 
 const accountRunQueues = new Map();
 
@@ -92,12 +92,14 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
 }
 
 function browserAuthHeaders(account, panelType, includeCredential = false) {
-  if (panelType === 'newapi') return { 'new-api-user': String(account.userId || '') };
-  if (!includeCredential) return {};
-  const token = decrypt(account.credential);
+  const headers = panelType === 'newapi' ? { 'new-api-user': String(account.userId || '') } : {};
+  if (!includeCredential) return headers;
+  if (account.browserAccessToken) return { ...headers, authorization: `Bearer ${decrypt(account.browserAccessToken)}` };
+  const token = panelType === 'generic' ? decrypt(account.credential) : '';
+  if (!token) return headers;
   if (account.authType === 'bearer') return { authorization: `Bearer ${token}` };
   if (account.authType === 'header') return { [account.headerName || 'authorization']: token };
-  return {};
+  return headers;
 }
 
 async function recoverAuthentication(account, endpoint, method, panelType, retried, body = '') {
@@ -113,12 +115,32 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   if (shouldUseBrowserSession(account, panelType, retried)) {
     let browserError;
     try {
+      const token = await accessTokenInBrowser(account.baseUrl);
+      if (token) {
+        const previousBrowserAccessToken = account.browserAccessToken;
+        account.browserAccessToken = encrypt(token);
+        try {
+          const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
+          mutateStore(latest => {
+            const saved = latest.accounts.find(item => item.id === account.id);
+            if (saved) saved.browserAccessToken = account.browserAccessToken;
+          });
+          return { data };
+        } catch (error) {
+          account.browserAccessToken = previousBrowserAccessToken;
+          throw error;
+        }
+      }
+    } catch (error) {
+      browserError = error;
+    }
+    try {
       const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType), body);
       return { data };
     } catch (error) {
       browserError = error;
     }
-    if (panelType === 'generic' && account.credential && ['bearer', 'header'].includes(account.authType)) {
+    if ((account.browserAccessToken || (panelType === 'generic' && account.credential)) && (panelType === 'newapi' || ['bearer', 'header'].includes(account.authType))) {
       try {
         const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
         return { data };
@@ -127,7 +149,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
       }
     }
     const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
-    throw new Error(`服务器浏览器登录态无效，请点击“浏览器登录”重新登录：${browserError.message}${details}`);
+    throw new Error(`服务器浏览器登录态无效，浏览器中也未取得可用令牌，请点击“浏览器登录”重新登录：${browserError.message}${details}`);
   }
   if (refreshError) throw refreshError;
   return null;
@@ -150,6 +172,7 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
     if (account.authType === 'cookie') headers.cookie = token;
     if (account.authType === 'header') headers[account.headerName || 'authorization'] = token;
   }
+  if (account.refreshMode === 'browser' && account.browserAccessToken) headers.authorization = `Bearer ${decrypt(account.browserAccessToken)}`;
   const requestBody = !['GET', 'HEAD'].includes(method) && body ? body : undefined;
   if (requestBody) headers['content-type'] = 'application/json';
   const response = await fetch(url, { method, headers, body: requestBody, redirect: 'manual', signal: AbortSignal.timeout(15000) });
@@ -551,6 +574,7 @@ async function runAccountUnlocked(id, action = 'poll') {
   if (!account || !account.enabled) throw new Error('账户不存在或已停用');
   const originalCredential = account.credential;
   const originalRefreshCookie = account.refreshCookie;
+  const originalBrowserAccessToken = account.browserAccessToken;
   const startedAt = new Date().toISOString();
   let run;
   try {
@@ -594,6 +618,7 @@ async function runAccountUnlocked(id, action = 'poll') {
       }
       if (account.credential !== originalCredential && saved.credential === originalCredential) saved.credential = account.credential;
       if (account.refreshCookie !== originalRefreshCookie && saved.refreshCookie === originalRefreshCookie) saved.refreshCookie = account.refreshCookie;
+      if (account.browserAccessToken !== originalBrowserAccessToken && saved.browserAccessToken === originalBrowserAccessToken) saved.browserAccessToken = account.browserAccessToken;
     }
     latest.runs.unshift(run);
     latest.runs = latest.runs.slice(0, 5000);

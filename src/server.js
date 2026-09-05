@@ -44,7 +44,7 @@ app.post('/api/logout', auth, (_req, res) => { res.setHeader('set-cookie', 'sess
 app.get('/api/dashboard', auth, (_req, res) => {
   const db = readStore();
   const tags = [...new Set([...(db.tags || []), ...db.accounts.flatMap(account => account.tags || [])])];
-  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, balanceBody, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), hasBalanceBody: Boolean(balanceBody), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
+  res.json({ accounts: db.accounts.map(({ credential, refreshCookie, pricingCookie, apiKey, balanceBody, browserAccessToken, models, ...x }) => ({ ...x, hasCredential: Boolean(credential), hasRefreshCookie: Boolean(refreshCookie), hasPricingCookie: Boolean(pricingCookie), hasApiKey: Boolean(apiKey), hasBalanceBody: Boolean(balanceBody), modelCount: models?.length || 0 })), tags, pollTags: db.pollTags || [], runs: db.runs.slice(0, 30), priceAlertUnreadCount: priceAlertsView(db).unreadCount });
 });
 app.get('/api/stats', auth, (_req, res) => {
   const db = readStore();

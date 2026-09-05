@@ -19,6 +19,7 @@ function connectCdp(url) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url); let nextId = 0;
     const pending = new Map();
+    const listeners = new Map();
     const timer = setTimeout(() => { socket.close(); reject(new Error('连接服务器浏览器超时')); }, 10000);
     socket.onopen = () => {
       clearTimeout(timer);
@@ -29,12 +30,21 @@ function connectCdp(url) {
             socket.send(JSON.stringify({ id, method, params }));
           });
         },
+        on(method, listener) {
+          if (!listeners.has(method)) listeners.set(method, new Set());
+          listeners.get(method).add(listener);
+          return () => listeners.get(method)?.delete(listener);
+        },
         close() { socket.close(); }
       });
     };
     socket.onmessage = event => {
       const message = JSON.parse(String(event.data));
-      if (!message.id || !pending.has(message.id)) return;
+      if (!message.id) {
+        for (const listener of listeners.get(message.method) || []) listener(message.params || {});
+        return;
+      }
+      if (!pending.has(message.id)) return;
       const { done, fail } = pending.get(message.id); pending.delete(message.id);
       if (message.error) fail(new Error(message.error.message)); else done(message.result);
     };
@@ -44,6 +54,96 @@ function connectCdp(url) {
       pending.clear();
     };
   });
+}
+
+export function bearerTokenFromHeaders(headers = {}) {
+  const entry = Object.entries(headers).find(([name]) => name.toLowerCase() === 'authorization');
+  return String(entry?.[1] || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+}
+
+function storedTokenExpression() {
+  return `(() => {
+    const tokenPattern = /^(?:eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+|[A-Za-z0-9_-]{24,})$/;
+    const visit = (value, key = '', depth = 0) => {
+      if (depth > 4 || value == null) return '';
+      if (typeof value === 'string') {
+        const clean = value.trim().replace(/^Bearer\\s+/i, '');
+        if (!/refresh|api.?key/i.test(key) && /access.?token|auth.?token|(^|[_-])token$/i.test(key) && tokenPattern.test(clean)) return clean;
+        try { return visit(JSON.parse(value), key, depth + 1); } catch {}
+        if (/refresh|api.?key/i.test(key)) return '';
+        const jwt = clean.match(/eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+/);
+        return jwt?.[0] || '';
+      }
+      if (typeof value !== 'object') return '';
+      for (const [childKey, childValue] of Object.entries(value)) {
+        const found = visit(childValue, childKey, depth + 1);
+        if (found) return found;
+      }
+      return '';
+    };
+    for (const storage of [localStorage, sessionStorage]) {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index); const found = visit(storage.getItem(key), key);
+        if (found) return found;
+      }
+    }
+    return '';
+  })()`;
+}
+
+async function existingOriginTargets(origin) {
+  const response = await fetch(`${cdpBase}/json/list`, { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) return [];
+  const targets = await response.json();
+  return targets.filter(target => target.type === 'page' && target.webSocketDebuggerUrl && (() => {
+    try { return new URL(target.url).origin === origin; } catch { return false; }
+  })());
+}
+
+async function tokenFromTarget(target, reload = false) {
+  const client = await connectCdp(target.webSocketDebuggerUrl);
+  try {
+    await client.call('Runtime.enable');
+    const stored = await client.call('Runtime.evaluate', { expression: storedTokenExpression(), returnByValue: true });
+    const storedToken = String(stored?.result?.value || '');
+    if (storedToken) return storedToken;
+    if (!reload) return '';
+
+    await client.call('Network.enable');
+    await client.call('Page.enable');
+    let finish;
+    const captured = new Promise(resolve => { finish = resolve; });
+    const off = client.on('Network.requestWillBeSent', event => {
+      const token = bearerTokenFromHeaders(event?.request?.headers);
+      if (token) finish(token);
+    });
+    await client.call('Page.reload', { ignoreCache: true });
+    const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 6000))]);
+    off();
+    return token;
+  } finally {
+    client.close();
+  }
+}
+
+export async function accessTokenInBrowser(baseUrl) {
+  const origin = new URL(baseUrl).origin;
+  const existing = await existingOriginTargets(origin);
+  for (const target of existing) {
+    const token = await tokenFromTarget(target, false);
+    if (token) return token;
+  }
+  if (existing[0]) return tokenFromTarget(existing[0], true);
+
+  const target = await cdpTarget(new URL('/', baseUrl).href);
+  try {
+    const client = await connectCdp(target.webSocketDebuggerUrl);
+    try {
+      await client.call('Runtime.enable');
+      await waitForOrigin(client, origin);
+    } finally { client.close(); }
+    return await tokenFromTarget(target, true);
+  } finally { await closeTarget(target.id); }
 }
 
 async function waitForOrigin(client, origin) {
