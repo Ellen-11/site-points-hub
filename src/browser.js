@@ -416,13 +416,15 @@ export async function checkinInBrowser(baseUrl, endpoint, options = {}) {
       return { success: false, message: '今日已签到（Checked in）' };
     }
 
-    if (options.turnstile) {
-      const ready = await evaluateUntil(client, turnstileReadyExpression(), 150);
-      if (!ready) throw new Error('Turnstile 人机验证尚未完成，请打开“浏览器登录”手动验证后重试签到');
-    }
-
     let finish;
-    const responseResult = new Promise(resolve => { finish = resolve; });
+    let capturedResponse = null;
+    const responseResult = new Promise(resolve => {
+      finish = value => {
+        if (capturedResponse) return;
+        capturedResponse = value;
+        resolve(value);
+      };
+    });
     off = client.on('Network.responseReceived', event => {
       let responseUrl;
       try { responseUrl = new URL(event?.response?.url || ''); } catch { return; }
@@ -435,9 +437,23 @@ export async function checkinInBrowser(baseUrl, endpoint, options = {}) {
       }).catch(() => {});
     });
 
-    const clicked = await evaluateUntil(client, clickActionExpression(options.actionText || '签到'), 25);
-    if (!clicked) throw new Error(`服务器浏览器中没有找到“${options.actionText || '签到'}”按钮，请设置正确的签到页面 path 和按钮文字`);
-    const captured = await Promise.race([
+    const actionText = options.actionText || 'Check in';
+    const clicked = await evaluateUntil(client, clickActionExpression(actionText), 25);
+    if (!clicked) throw new Error(`服务器浏览器中没有找到“${actionText}”按钮，请设置正确的签到页面 path 和按钮文字`);
+
+    if (options.turnstile) {
+      let verified = false;
+      for (let attempt = 0; attempt < 150 && !capturedResponse; attempt += 1) {
+        try {
+          const result = await client.call('Runtime.evaluate', { expression: turnstileReadyExpression(), returnByValue: true });
+          if (!result?.exceptionDetails && result?.result?.value === true) { verified = true; break; }
+        } catch {}
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
+      if (!capturedResponse && !verified) throw new Error('Turnstile 人机验证尚未完成，请打开“浏览器登录”手动验证后重试签到');
+    }
+
+    const captured = capturedResponse || await Promise.race([
       responseResult,
       new Promise(resolve => setTimeout(() => resolve(null), 20000))
     ]);

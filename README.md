@@ -36,7 +36,7 @@ Bearer 自动刷新会识别 HTTP 401、403，以及常见的 Unauthorized、inv
 
 GitHub OAuth 两步登录可在 `BROWSER_LOGIN_ACCOUNTS_JSON` 的对应站点中设置 `{"action":"Sign in","nextAction":"Continue with GitHub"}`。单站环境变量对应为 `BROWSER_LOGIN_ACTION=Sign in` 和 `BROWSER_LOGIN_NEXT_ACTION=Continue with GitHub`。服务器浏览器中的 GitHub 账号仍需人工登录一次；之后站点退出时会自动依次点击这两个按钮并复用 GitHub 登录态。
 
-已登录但签到接口要求 Cloudflare Turnstile token 的站点，使用独立环境变量 `BROWSER_CHECKIN_ACCOUNTS_JSON`。例如 `{"站点名":{"action":"签到","path":"/profile","turnstile":true}}`：应用会在服务器浏览器打开指定页面；若按钮已经显示 `Checked in` 或“已签到”，直接记录为已签到，否则等待页面正常生成 Turnstile token 后再点击签到按钮，并读取原站点签到接口的 JSON 结果。若人机验证要求交互，仍需在“浏览器登录”中人工完成；应用不会绕过验证码。该变量与登录账号、GitHub 登录及用户协议配置互不影响。
+已登录但签到接口要求 Cloudflare Turnstile token 的站点，使用独立环境变量 `BROWSER_CHECKIN_ACCOUNTS_JSON`。例如 `{"站点名":{"action":"Check in","path":"/profile","turnstile":true}}`：应用会在服务器浏览器打开指定页面；若按钮已经显示 `Checked in` 或“已签到”，直接记录为已签到，否则先点击 `Check in`，再等待页面正常完成 Turnstile 验证并读取原站点签到接口的 JSON 结果。若人机验证要求交互，仍需在“浏览器登录”中人工完成；应用不会绕过验证码。该变量与登录账号、GitHub 登录及用户协议配置互不影响。
 
 每个站点可以独立保存模型 API 地址和 API Key。地址可直接填写到 `/v1`，应用优先从 `/v1/models` 拉取可用模型，并依次探测站点的 `/api/pricing`、`/api/models/pricing` 和 `/api/models` 价格数据；若 `/v1/models` 被上游拒绝，则自动从价格列表提取模型。网页回退或不含价格字段的 JSON 会被自动跳过。价格接口不可用时，模型仍会以“价格未知”显示并可正常选择、测试和用于网关。可在按次和按量计费间切换，再按 GPT、Gemini、Claude、DeepSeek、Qwen、图像、视频和其他分类浏览。只有最终手动选中的一个模型会绑定到该站并进入统一网关，测试模型和网关请求也会使用这组独立地址与 Key。
 

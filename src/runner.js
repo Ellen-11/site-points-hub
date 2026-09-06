@@ -161,7 +161,7 @@ export function browserCheckinOptions(account, env = process.env) {
     const value = entry[1];
     const checkin = value && typeof value === 'object' ? value : {};
     return {
-      actionText: String(checkin.action || checkin.actionText || '签到'),
+      actionText: String(checkin.action || checkin.actionText || 'Check in'),
       path: String(checkin.path || '/'),
       turnstile: checkin.turnstile === undefined ? true : enabled(checkin.turnstile)
     };

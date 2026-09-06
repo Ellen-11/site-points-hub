@@ -99,6 +99,7 @@ test('loads separate browser Turnstile check-in settings', () => {
   }) };
   assert.deepEqual(browserCheckinOptions({ name: 'Tabi', baseUrl: 'https://tabi.example' }, env), { actionText: 'Check in', path: '/profile', turnstile: true });
   assert.deepEqual(browserCheckinOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: '签到', path: '/', turnstile: false });
+  assert.deepEqual(browserCheckinOptions({ name: '默认', baseUrl: 'https://default.example' }, { BROWSER_CHECKIN_ACCOUNTS_JSON: '{"默认":{}}' }), { actionText: 'Check in', path: '/', turnstile: true });
   assert.equal(browserCheckinOptions({ name: '未配置', baseUrl: 'https://none.example' }, env), null);
 });
 
