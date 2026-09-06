@@ -56,9 +56,10 @@ function connectCdp(url) {
   });
 }
 
-export function bearerTokenFromHeaders(headers = {}) {
+export function bearerTokenFromHeaders(headers = {}, ignoredTokens = []) {
   const entry = Object.entries(headers).find(([name]) => name.toLowerCase() === 'authorization');
-  return String(entry?.[1] || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+  const token = String(entry?.[1] || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
+  return token && !new Set(ignoredTokens).has(token) ? token : '';
 }
 
 export function normalizeLoginActionText(value = '') {
@@ -104,13 +105,13 @@ async function existingOriginTargets(origin) {
   })());
 }
 
-async function tokenFromTarget(target, reload = false) {
+async function tokenFromTarget(target, reload = false, ignoredTokens = []) {
   const client = await connectCdp(target.webSocketDebuggerUrl);
   try {
     await client.call('Runtime.enable');
     const stored = await client.call('Runtime.evaluate', { expression: storedTokenExpression(), returnByValue: true });
     const storedToken = String(stored?.result?.value || '');
-    if (storedToken) return storedToken;
+    if (storedToken && !new Set(ignoredTokens).has(storedToken)) return storedToken;
     if (!reload) return '';
 
     await client.call('Network.enable');
@@ -118,7 +119,7 @@ async function tokenFromTarget(target, reload = false) {
     let finish;
     const captured = new Promise(resolve => { finish = resolve; });
     const off = client.on('Network.requestWillBeSent', event => {
-      const token = bearerTokenFromHeaders(event?.request?.headers);
+      const token = bearerTokenFromHeaders(event?.request?.headers, ignoredTokens);
       if (token) finish(token);
     });
     await client.call('Page.reload', { ignoreCache: true });
@@ -149,10 +150,16 @@ async function performLoginAction(target, options = {}) {
   try {
     await client.call('Runtime.enable');
     await client.call('Network.enable');
+    const beforeLogin = await client.call('Runtime.evaluate', { expression: storedTokenExpression(), returnByValue: true }).catch(() => null);
+    const beforeLoginToken = String(beforeLogin?.result?.value || '').trim();
+    options.ignoredTokens = [...new Set([...(options.ignoredTokens || []), beforeLoginToken].filter(Boolean))];
+    const hasCredentials = Boolean(options.username && options.password);
+    let captureReady = !hasCredentials;
     let finish;
     const captured = new Promise(resolve => { finish = resolve; });
     off = client.on('Network.requestWillBeSent', event => {
-      const token = bearerTokenFromHeaders(event?.request?.headers);
+      if (!captureReady) return;
+      const token = bearerTokenFromHeaders(event?.request?.headers, options.ignoredTokens || []);
       if (token) finish(token);
     });
     const clickExpression = `(() => {
@@ -164,7 +171,7 @@ async function performLoginAction(target, options = {}) {
       target.click();
       return true;
     })()`;
-    const clicked = await evaluateUntil(client, clickExpression, 3);
+    const clicked = await evaluateUntil(client, clickExpression, 25);
     if (!clicked) return { clicked: false, token: '' };
 
     if (options.username && options.password) {
@@ -207,6 +214,7 @@ async function performLoginAction(target, options = {}) {
           if (agreed) await new Promise(resolve => setTimeout(resolve, 500));
         }
         await new Promise(resolve => setTimeout(resolve, 500));
+        captureReady = true;
         const submitExpression = `(() => {
           const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
           const expected = ${JSON.stringify(expected)};
@@ -232,21 +240,21 @@ async function performLoginAction(target, options = {}) {
 
 async function recoverTokenWithLoginAction(target, loginOptions, origin) {
   const clicked = await performLoginAction(target, loginOptions);
-  if (clicked.token) return clicked.token;
   if (!clicked.clicked) return '';
   for (let attempt = 0; attempt < 12; attempt += 1) {
     await new Promise(resolve => setTimeout(resolve, 500));
     const targets = await existingOriginTargets(origin).catch(() => []);
     for (const candidate of targets) {
-      const token = await tokenFromTarget(candidate, false).catch(() => '');
+      const token = await tokenFromTarget(candidate, false, loginOptions.ignoredTokens || []).catch(() => '');
       if (token) return token;
     }
   }
-  return '';
+  return clicked.token;
 }
 
 export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
   if (typeof loginOptions === 'string') loginOptions = { actionText: loginOptions };
+  loginOptions.ignoredTokens = [...new Set((loginOptions.ignoredTokens || []).map(token => String(token || '').trim()).filter(Boolean))];
   const origin = new URL(baseUrl).origin;
   const existing = await existingOriginTargets(origin);
   if (existing[0] && loginOptions.actionText) {
@@ -254,10 +262,10 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
     if (token) return token;
   }
   for (const target of existing) {
-    const token = await tokenFromTarget(target, false);
+    const token = await tokenFromTarget(target, false, loginOptions.ignoredTokens);
     if (token) return token;
   }
-  if (existing[0]) return tokenFromTarget(existing[0], true);
+  if (existing[0]) return tokenFromTarget(existing[0], true, loginOptions.ignoredTokens);
 
   const target = await cdpTarget(new URL('/', baseUrl).href);
   try {
@@ -270,7 +278,7 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
       const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
       if (token) return token;
     }
-    return await tokenFromTarget(target, true);
+    return await tokenFromTarget(target, true, loginOptions.ignoredTokens);
   } finally { await closeTarget(target.id); }
 }
 

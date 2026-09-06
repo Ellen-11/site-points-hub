@@ -47,6 +47,7 @@ test('browser recovery retries twice and stops immediately after success', async
 
 test('reads bearer tokens captured from browser network requests', () => {
   assert.equal(bearerTokenFromHeaders({ Authorization: 'Bearer browser-token' }), 'browser-token');
+  assert.equal(bearerTokenFromHeaders({ Authorization: 'Bearer stale-token' }, ['stale-token']), '');
   assert.equal(bearerTokenFromHeaders({ authorization: 'Basic abc' }), '');
 });
 

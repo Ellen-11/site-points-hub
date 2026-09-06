@@ -145,7 +145,11 @@ function browserAuthHeaders(account, panelType, includeCredential = false) {
 async function recoverWithBrowserOnce(account, endpoint, method, panelType, body) {
   let browserError;
   try {
-    const token = await accessTokenInBrowser(account.baseUrl, browserLoginOptions(account));
+    const ignoredTokens = [
+      account.browserAccessToken ? decrypt(account.browserAccessToken) : '',
+      panelType === 'generic' && account.credential ? decrypt(account.credential) : ''
+    ].filter(Boolean);
+    const token = await accessTokenInBrowser(account.baseUrl, { ...browserLoginOptions(account), ignoredTokens });
     if (token) {
       const previousBrowserAccessToken = account.browserAccessToken;
       account.browserAccessToken = encrypt(token);
