@@ -259,7 +259,7 @@ async function performPriceScan() {
   const errors = [];
   let refreshed = 0;
   for (const account of candidates) {
-    try { await refreshModelCatalog(account.id); refreshed++;
+    try { await refreshModelCatalog(account.id, { allowBrowserRecovery: false, requirePricing: true }); refreshed++;
     } catch (error) { errors.push({ accountId: account.id, accountName: account.name, message: error.message }); }
   }
   const db = readStore();

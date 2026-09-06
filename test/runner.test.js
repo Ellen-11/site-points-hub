@@ -28,6 +28,7 @@ test('uses the persistent server browser as a fallback for generic session accou
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'newapi'), true);
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'public'), false);
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'generic', true), false);
+  assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'generic', false, false), false);
 });
 
 test('browser recovery retries twice and stops immediately after success', async () => {

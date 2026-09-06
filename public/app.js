@@ -188,8 +188,8 @@ window.renderPriceAlerts = () => {
   $('#priceFailureCount').textContent = (priceAlertData.lastScan?.failed || 0).toLocaleString();
   $('#priceAlertsUpdatedAt').textContent = priceAlertData.lastCheckedAt ? `扫描于 ${new Date(priceAlertData.lastCheckedAt).toLocaleString()}` : '尚未扫描';
   $('#priceScanHint').textContent = priceAlertData.lastScan
-    ? `本次已尝试全部 ${priceAlertData.lastScan.monitored} 个启用站点，成功刷新 ${priceAlertData.lastScan.refreshed} 个${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。按量以输入价格为主、输出价格为次进行比较。`
-    : '按次与按量的两套规则首次扫描都只建立价格基准，不产生提醒。';
+    ? `本次已在后台尝试全部 ${priceAlertData.lastScan.monitored} 个启用站点，成功刷新 ${priceAlertData.lastScan.refreshed} 个${priceAlertData.lastScan.failed ? `，${priceAlertData.lastScan.failed} 个失败` : ''}。认证失败不会启动浏览器；按量以输入价格为主、输出价格为次进行比较。`
+    : '按次与按量的两套规则首次扫描都只建立价格基准，不产生提醒；自动扫描不会启动浏览器登录。';
   $('#priceAlertHistory').innerHTML = alerts.map(item => {
     const watchText = item.pinned
       ? item.watchStatus === 'missing' ? '当前已消失'

@@ -92,8 +92,8 @@ export function isHtmlResponse(text, contentType = '') {
   return /text\/html/i.test(contentType) || /^\s*(?:<!doctype\s+html|<html\b)/i.test(String(text));
 }
 
-export function shouldUseBrowserSession(account, panelType = 'generic', retried = false) {
-  return !retried && panelType !== 'public' && account.refreshMode === 'browser';
+export function shouldUseBrowserSession(account, panelType = 'generic', retried = false, allowBrowserRecovery = true) {
+  return allowBrowserRecovery && !retried && panelType !== 'public' && account.refreshMode === 'browser';
 }
 
 export function isRateLimitedError(error) {
@@ -234,10 +234,11 @@ async function recoverWithBrowserOnce(account, endpoint, method, panelType, body
   throw browserError || new Error('服务器浏览器未取得可用登录态');
 }
 
-async function recoverAuthentication(account, endpoint, method, panelType, retried, body = '') {
+async function recoverAuthentication(account, endpoint, method, panelType, retried, body = '', options = {}) {
   if (retried || panelType === 'public') return null;
+  const allowBrowserRecovery = options.allowBrowserRecovery !== false;
   let refreshError = null;
-  if (panelType === 'generic') {
+  if (panelType === 'generic' && (allowBrowserRecovery || account.refreshMode !== 'browser')) {
     try {
       if (await refreshBearer(account)) {
         if (account.refreshMode !== 'browser') return { retry: true };
@@ -254,7 +255,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
       refreshError = error;
     }
   }
-  if (shouldUseBrowserSession(account, panelType, retried)) {
+  if (shouldUseBrowserSession(account, panelType, retried, allowBrowserRecovery)) {
     const rejectedTokens = new Set();
     try {
       return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body, rejectedTokens), 600, error => !isRateLimitedError(error));
@@ -268,7 +269,7 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   return null;
 }
 
-async function call(account, endpoint, method, panelType = 'generic', retried = false, body = '') {
+async function call(account, endpoint, method, panelType = 'generic', retried = false, body = '', options = {}) {
   const url = await safeUrl(account.baseUrl, endpoint);
   const headers = {
     accept: 'application/json, text/plain, */*',
@@ -295,16 +296,18 @@ async function call(account, endpoint, method, panelType = 'generic', retried = 
     const html = isHtmlResponse(text, response.headers.get('content-type') || '');
     const loginRedirect = response.status >= 300 && response.status < 400;
     if (html || loginRedirect) {
-      const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody);
-      if (recovered?.retry) return call(account, endpoint, method, panelType, true, body);
+      const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody, options);
+      if (recovered?.retry) return call(account, endpoint, method, panelType, true, body, options);
       if (recovered && 'data' in recovered) return recovered.data;
     }
     throw new Error(html ? `接口返回网页而不是 JSON (HTTP ${response.status})` : loginRedirect ? `接口重定向到登录页面 (HTTP ${response.status})` : text.slice(0, 200) || `接口没有返回 JSON (HTTP ${response.status})`);
   }
   if (isExpiredAuthentication(response.status, data)) {
-    const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody);
-    if (recovered?.retry) return call(account, endpoint, method, panelType, true, body);
+    const recovered = await recoverAuthentication(account, url.href, method, panelType, retried, requestBody, options);
+    if (recovered?.retry) return call(account, endpoint, method, panelType, true, body, options);
     if (recovered && 'data' in recovered) return recovered.data;
+    const message = data?.error?.message || data?.error || data?.message || data?.msg || 'Unauthorized';
+    throw new Error(`${message} (HTTP ${response.status})`);
   }
   if (!response.ok) {
     const message = data?.error?.message || data?.error || data?.message || data?.msg;
@@ -496,11 +499,11 @@ export function modelsFromPricing(response) {
   return { data: list.map(item => ({ id: item?.model_name || item?.name })).filter(item => item.id) };
 }
 
-async function loadModelPricing(account, auth) {
+async function loadModelPricing(account, auth, options = {}) {
   const paths = ['/api/pricing', '/api/models/pricing', '/api/models']; const errors = [];
   for (const path of paths) {
     try {
-      const response = await call(account, path, 'GET', auth);
+      const response = await call(account, path, 'GET', auth, false, '', options);
       if (hasModelPricing(response)) return response;
       errors.push(`${path}: JSON 中没有价格字段`);
     } catch (error) { errors.push(`${path}: ${error.message}`); }
@@ -542,7 +545,7 @@ export function buildPerCallCatalog(modelsResponse, pricingResponse) {
   return buildModelCatalog(modelsResponse, pricingResponse).filter(x => x.billing === 'call').map(({ billing, ...x }) => x);
 }
 
-async function refreshModelCatalogUnlocked(id) {
+async function refreshModelCatalogUnlocked(id, options = {}) {
   const db = readStore(); const account = db.accounts.find(x => x.id === id);
   if (!account) throw new Error('账户不存在');
   const pricingAccount = pricingRequestAccount(account); const auth = pricingAuthType(pricingAccount);
@@ -551,10 +554,11 @@ async function refreshModelCatalogUnlocked(id) {
   catch (error) { modelsError = error.message; }
   let pricing = { data: [] };
   try {
-    pricing = await loadModelPricing(pricingAccount, auth);
+    pricing = await loadModelPricing(pricingAccount, auth, options);
     account.modelPricingError = '';
   } catch (error) {
     account.modelPricingError = error.message;
+    if (options.requirePricing) throw error;
   }
   if (!models) models = modelsFromPricing(pricing);
   if (!models.data?.length) throw new Error(`无法拉取模型：${modelsError || '模型列表和价格列表均为空'}`);
@@ -563,8 +567,8 @@ async function refreshModelCatalogUnlocked(id) {
   if (!account.userGroup) {
     try {
       const profile = account.panelType === 'generic' && account.balancePath
-        ? await call(account, account.balancePath, account.balanceMethod || 'GET', 'generic', false, account.balanceBody ? decrypt(account.balanceBody) : '')
-        : await call(account, '/api/user/self', 'GET', 'newapi');
+        ? await call(account, account.balancePath, account.balanceMethod || 'GET', 'generic', false, account.balanceBody ? decrypt(account.balanceBody) : '', options)
+        : await call(account, '/api/user/self', 'GET', 'newapi', false, '', options);
       account.userGroup = String(valueAt(profile, 'data.group') ?? valueAt(profile, 'user.group') ?? valueAt(profile, 'group') ?? '').trim();
     } catch {}
   }
@@ -594,8 +598,8 @@ async function refreshModelCatalogUnlocked(id) {
   return account.models;
 }
 
-export function refreshModelCatalog(id) {
-  return serializeAccountRun(id, () => refreshModelCatalogUnlocked(id));
+export function refreshModelCatalog(id, options = {}) {
+  return serializeAccountRun(id, () => refreshModelCatalogUnlocked(id, options));
 }
 
 export async function testModelConnection(id) {
