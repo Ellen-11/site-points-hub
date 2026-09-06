@@ -45,9 +45,11 @@ export function recordInviteCount(db, account, count, now = new Date()) {
 
 export function inviteAlertsView(db = readStore()) {
   const watch = db.inviteWatch || {};
-  const alerts = [...(db.inviteWatch?.alerts || [])].sort((a, b) => String(b.detectedAt || '').localeCompare(String(a.detectedAt || '')));
-  const monitored = (db.accounts || []).filter(account => Number.isFinite(Number(account.inviteCount)) && account.inviteCount !== null);
   const accounts = new Map((db.accounts || []).map(account => [account.id, account]));
+  const alerts = [...(db.inviteWatch?.alerts || [])]
+    .map(alert => ({ ...alert, url: accounts.get(alert.accountId)?.baseUrl || '' }))
+    .sort((a, b) => String(b.detectedAt || '').localeCompare(String(a.detectedAt || '')));
+  const monitored = (db.accounts || []).filter(account => Number.isFinite(Number(account.inviteCount)) && account.inviteCount !== null);
   const recentAdditions = (watch.lastScan?.additions || []).map(item => ({
     ...item,
     url: accounts.get(item.accountId)?.baseUrl || ''

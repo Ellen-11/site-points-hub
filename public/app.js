@@ -106,14 +106,15 @@ window.renderInviteAlerts = () => {
   siteSelect.value = selectedSite;
   const activeSite = siteSelect.value;
   const alerts = inviteAlertData.alerts.filter(item => !activeSite || item.accountId === activeSite);
-  const additions = (inviteAlertData.recentAdditions || []).filter(item => !activeSite || item.accountId === activeSite);
   $('#inviteMonitoredCount').textContent = inviteAlertData.monitoredCount.toLocaleString();
   $('#inviteRecentAddedCount').textContent = Number(inviteAlertData.recentAddedCount || 0).toLocaleString();
   $('#inviteUnreadCount').textContent = inviteAlertData.unreadCount.toLocaleString();
   $('#inviteAlertsUpdatedAt').textContent = inviteAlertData.lastScan?.checkedAt ? `检测于 ${new Date(inviteAlertData.lastScan.checkedAt).toLocaleString()}` : inviteAlertData.lastCheckedAt ? '已有基准，等待检测新增' : '尚未建立邀请基准';
-  $('#inviteScanHint').textContent = inviteAlertData.lastScan ? `本次成功 ${inviteAlertData.lastScan.refreshed}/${inviteAlertData.lastScan.monitored} 个站点${inviteAlertData.lastScan.failed ? `，失败 ${inviteAlertData.lastScan.failed} 个` : ''}` : '点击“检测新增”后显示';
-  $('#inviteSiteCounts').innerHTML = additions.map(item => `<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"><strong>${esc(item.accountName)}</strong><b>+${Number(item.addedCount).toLocaleString()} 人</b><time>本次检测新增</time><span>打开站点查收 ↗</span></a>`).join('') || '<p>本次没有检测到新增邀请。</p>';
-  $('#inviteAlertHistory').innerHTML = alerts.map(item => `<article class="unread"><strong>${esc(item.accountName)}</strong><b class="invite-added">+${Number(item.addedCount).toLocaleString()} 人</b><span>邀请人数 ${Number(item.previousCount).toLocaleString()} → ${Number(item.currentCount).toLocaleString()}</span><time>${new Date(item.detectedAt).toLocaleString()}</time><div class="price-alert-actions"><button class="ghost" onclick="dismissInviteAlert('${esc(item.id)}')">已读</button></div></article>`).join('') || '<p>暂无新增邀请提醒。点击“检测新增”即可逐站检查。</p>';
+  $('#inviteAlertHistory').innerHTML = alerts.map(item => {
+    const details = `<strong>${esc(item.accountName)}</strong><b class="invite-added">+${Number(item.addedCount).toLocaleString()} 人</b><span>邀请人数 ${Number(item.previousCount).toLocaleString()} → ${Number(item.currentCount).toLocaleString()}</span><time>${new Date(item.detectedAt).toLocaleString()}</time><em>打开站点查收 ↗</em>`;
+    const linked = item.url ? `<a class="invite-alert-link" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${details}</a>` : `<div class="invite-alert-link">${details}</div>`;
+    return `<article class="unread">${linked}<div class="price-alert-actions"><button class="ghost" onclick="dismissInviteAlert('${esc(item.id)}')">已读</button></div></article>`;
+  }).join('') || `<p>暂无新增邀请提醒。点击“检测新增”即可逐站检查。${inviteAlertData.lastScan ? `上次成功 ${inviteAlertData.lastScan.refreshed}/${inviteAlertData.lastScan.monitored} 个站点${inviteAlertData.lastScan.failed ? `，失败 ${inviteAlertData.lastScan.failed} 个` : ''}。` : ''}</p>`;
 };
 
 window.loadInviteAlerts = async () => {
