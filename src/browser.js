@@ -161,6 +161,8 @@ async function performLoginAction(target, options = {}) {
       const token = bearerTokenFromHeaders(event?.request?.headers, options.ignoredTokens || []);
       if (token) finish(token);
     });
+    const formReadyExpression = `(() => [...document.querySelectorAll('input[type="password"]')].some(element => !element.disabled && element.getClientRects().length))()`;
+    let clicked = hasCredentials && await evaluateUntil(client, formReadyExpression, 5);
     const clickExpression = `(() => {
       const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
       const expected = ${JSON.stringify(expected)};
@@ -170,7 +172,7 @@ async function performLoginAction(target, options = {}) {
       target.click();
       return true;
     })()`;
-    const clicked = await evaluateUntil(client, clickExpression, 25);
+    if (!clicked) clicked = await evaluateUntil(client, clickExpression, 25);
     if (!clicked) return { clicked: false, token: '' };
 
     if (options.username && options.password) {
@@ -267,6 +269,7 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
   if (existing[0]) return tokenFromTarget(existing[0], true, loginOptions.ignoredTokens);
 
   const target = await cdpTarget(new URL('/', baseUrl).href);
+  let closeWhenDone = false;
   try {
     const client = await connectCdp(target.webSocketDebuggerUrl);
     try {
@@ -275,13 +278,17 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
     } finally { client.close(); }
     await new Promise(resolve => setTimeout(resolve, 800));
     const existingToken = await tokenFromTarget(target, false, loginOptions.ignoredTokens);
-    if (existingToken) return existingToken;
+    if (existingToken) { closeWhenDone = true; return existingToken; }
     if (loginOptions.actionText) {
       const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
-      if (token) return token;
+      if (token) { closeWhenDone = true; return token; }
     }
-    return await tokenFromTarget(target, true, loginOptions.ignoredTokens);
-  } finally { await closeTarget(target.id); }
+    const token = await tokenFromTarget(target, true, loginOptions.ignoredTokens);
+    closeWhenDone = Boolean(token);
+    return token;
+  } finally {
+    if (closeWhenDone) await closeTarget(target.id);
+  }
 }
 
 async function waitForOrigin(client, origin) {

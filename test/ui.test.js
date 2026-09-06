@@ -74,6 +74,7 @@ test('custom bearer accounts can save automatic refresh settings', () => {
 
 test('server browser routes require the admin session', () => {
   const source = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const browser = fs.readFileSync(new URL('../src/browser.js', import.meta.url), 'utf8');
   const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
   const startup = fs.readFileSync(new URL('../start-container.sh', import.meta.url), 'utf8');
   assert.match(source, /app\.get\('\/browser', auth/);
@@ -84,6 +85,8 @@ test('server browser routes require the admin session', () => {
   assert.match(startup, /SingletonLock/);
   assert.match(startup, /json\/version/);
   assert.match(startup, /x11vnc .* -localhost/);
+  assert.match(browser, /formReadyExpression/);
+  assert.match(browser, /if \(closeWhenDone\) await closeTarget/);
 });
 
 test('manual refresh shows progress while browser recovery runs', () => {
