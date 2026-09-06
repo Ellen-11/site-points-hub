@@ -63,6 +63,8 @@ test('custom bearer accounts can save automatic refresh settings', () => {
   assert.match(html, /BROWSER_LOGIN_PASSWORD/);
   assert.match(html, /BROWSER_LOGIN_ACCOUNTS_JSON/);
   assert.match(html, /BROWSER_LOGIN_AGREE/);
+  assert.match(html, /BROWSER_LOGIN_NEXT_ACTION/);
+  assert.match(html, /Continue with GitHub/);
   assert.match(html, /agree:true/);
   assert.match(html, /先点登录入口，再填写账号密码、勾选协议/);
   assert.match(html, /name="balanceMethod"/);

@@ -181,6 +181,18 @@ async function evaluateUntil(client, expression, attempts = 20) {
   return false;
 }
 
+function clickActionExpression(actionText) {
+  return `(() => {
+    const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
+    const expected = ${JSON.stringify(normalizeLoginActionText(actionText))};
+    const elements = [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')];
+    const target = elements.find(element => !element.disabled && element.getClientRects().length && normalize(element.innerText || element.textContent || element.value || element.getAttribute('aria-label')) === expected);
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`;
+}
+
 async function performLoginAction(target, options = {}) {
   const expected = normalizeLoginActionText(options.actionText);
   if (!expected) return { clicked: false, token: '' };
@@ -207,18 +219,16 @@ async function performLoginAction(target, options = {}) {
     });
     const offResponse = responseTokenListener(client, finish, options.ignoredTokens || [], () => captureReady);
     const formReadyExpression = `(() => [...document.querySelectorAll('input[type="password"]')].some(element => !element.disabled && element.getClientRects().length))()`;
-    let clicked = hasCredentials && await evaluateUntil(client, formReadyExpression, 5);
-    const clickExpression = `(() => {
-      const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
-      const expected = ${JSON.stringify(expected)};
-      const elements = [...document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')];
-      const target = elements.find(element => !element.disabled && element.getClientRects().length && normalize(element.innerText || element.textContent || element.value || element.getAttribute('aria-label')) === expected);
-      if (!target) return false;
-      target.click();
-      return true;
-    })()`;
+    let clicked = !options.nextActionText && hasCredentials && await evaluateUntil(client, formReadyExpression, 5);
+    const clickExpression = clickActionExpression(expected);
     if (!clicked) clicked = await evaluateUntil(client, clickExpression, 25);
     if (!clicked) return { clicked: false, token: '' };
+
+    if (options.nextActionText) {
+      const nextClicked = await evaluateUntil(client, clickActionExpression(options.nextActionText), 30);
+      if (!nextClicked) return { clicked: false, token: '' };
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
 
     if (options.username && options.password) {
       const fillExpression = `(() => {
@@ -312,14 +322,16 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
     const score = target => /(?:login|sign[-_]?in|auth)/i.test(String(target.url || '')) ? 1 : 0;
     return score(right) - score(left);
   });
-  const freshCredentialLogin = Boolean(loginOptions.actionText && loginOptions.username && loginOptions.password);
-  if (loginOptions.actionText && !freshCredentialLogin) {
+  const freshAutomatedLogin = Boolean(loginOptions.actionText && (
+    (loginOptions.username && loginOptions.password) || loginOptions.nextActionText
+  ));
+  if (loginOptions.actionText && !freshAutomatedLogin) {
     for (const target of ordered.slice(0, 3)) {
       const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
       if (token) return token;
     }
   }
-  if (!freshCredentialLogin) {
+  if (!freshAutomatedLogin) {
     for (const target of ordered.slice(0, 3)) {
       const token = await tokenFromTarget(target, true, loginOptions.ignoredTokens);
       if (token) return token;

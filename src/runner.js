@@ -129,6 +129,7 @@ export function browserLoginOptions(account, env = process.env) {
         const login = entry[1];
         return {
           actionText: String(login.action || login.actionText || account.browserLoginAction || ''),
+          nextActionText: String(login.nextAction || login.nextActionText || login.providerAction || ''),
           username: String(login.username || ''),
           password: String(login.password || ''),
           agree: enabled(login.agree)
@@ -140,6 +141,7 @@ export function browserLoginOptions(account, env = process.env) {
   const matched = !selector || identities.includes(selector);
   return {
     actionText: matched ? String(env.BROWSER_LOGIN_ACTION || account.browserLoginAction || '') : account.browserLoginAction || '',
+    nextActionText: matched ? String(env.BROWSER_LOGIN_NEXT_ACTION || '') : '',
     username: matched ? String(env.BROWSER_LOGIN_USERNAME || '') : '',
     password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : '',
     agree: matched && enabled(env.BROWSER_LOGIN_AGREE)
