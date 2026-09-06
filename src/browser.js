@@ -312,15 +312,18 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
     const score = target => /(?:login|sign[-_]?in|auth)/i.test(String(target.url || '')) ? 1 : 0;
     return score(right) - score(left);
   });
-  if (loginOptions.actionText) {
+  const freshCredentialLogin = Boolean(loginOptions.actionText && loginOptions.username && loginOptions.password);
+  if (loginOptions.actionText && !freshCredentialLogin) {
     for (const target of ordered.slice(0, 3)) {
       const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
       if (token) return token;
     }
   }
-  for (const target of ordered.slice(0, 3)) {
-    const token = await tokenFromTarget(target, true, loginOptions.ignoredTokens);
-    if (token) return token;
+  if (!freshCredentialLogin) {
+    for (const target of ordered.slice(0, 3)) {
+      const token = await tokenFromTarget(target, true, loginOptions.ignoredTokens);
+      if (token) return token;
+    }
   }
 
   const target = await cdpTarget(new URL('/', baseUrl).href);
