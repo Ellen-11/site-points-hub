@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bearerTokenFromHeaders, bearerTokenFromResponseText, normalizeLoginActionText } from '../src/browser.js';
-import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isAuthenticationError, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { browserCheckinOptions, browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isAuthenticationError, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -90,6 +90,16 @@ test('loads separate browser login credentials for multiple sites', () => {
   }) };
   assert.deepEqual(browserLoginOptions({ name: '星期五', baseUrl: 'https://friday.example' }, env), { actionText: 'Sign in', nextActionText: 'Continue with GitHub', username: 'friday-user', password: 'friday-secret', agree: true });
   assert.deepEqual(browserLoginOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: 'Login', nextActionText: '', username: 'other-user', password: 'other-secret', agree: false });
+});
+
+test('loads separate browser Turnstile check-in settings', () => {
+  const env = { BROWSER_CHECKIN_ACCOUNTS_JSON: JSON.stringify({
+    'Tabi': { action: 'Check in', path: '/profile' },
+    'other.example': { action: '签到', turnstile: false }
+  }) };
+  assert.deepEqual(browserCheckinOptions({ name: 'Tabi', baseUrl: 'https://tabi.example' }, env), { actionText: 'Check in', path: '/profile', turnstile: true });
+  assert.deepEqual(browserCheckinOptions({ name: '其他', baseUrl: 'https://other.example' }, env), { actionText: '签到', path: '/', turnstile: false });
+  assert.equal(browserCheckinOptions({ name: '未配置', baseUrl: 'https://none.example' }, env), null);
 });
 
 test('serializes concurrent balance and check-in runs for the same account', async () => {

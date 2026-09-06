@@ -193,6 +193,11 @@ function clickActionExpression(actionText) {
   })()`;
 }
 
+function turnstileReadyExpression() {
+  return `(() => [...document.querySelectorAll('[name="cf-turnstile-response"],[name^="cf-turnstile-response-"]')]
+    .some(element => String(element.value || element.textContent || '').trim().length > 20))()`;
+}
+
 async function performLoginAction(target, options = {}) {
   const expected = normalizeLoginActionText(options.actionText);
   if (!expected) return { clicked: false, token: '' };
@@ -382,6 +387,57 @@ export async function openBrowserLogin(baseUrl) {
   const url = new URL(baseUrl).href;
   await cdpTarget(url);
   return { ok: true, url };
+}
+
+export async function checkinInBrowser(baseUrl, endpoint, options = {}) {
+  const pageUrl = new URL(options.path || '/', baseUrl).href;
+  const endpointUrl = new URL(endpoint, baseUrl);
+  const target = await cdpTarget(pageUrl);
+  const client = await connectCdp(target.webSocketDebuggerUrl);
+  let closeWhenDone = false;
+  let off = () => {};
+  try {
+    await client.call('Runtime.enable');
+    await client.call('Network.enable');
+    await waitForOrigin(client, new URL(baseUrl).origin);
+
+    if (options.turnstile) {
+      const ready = await evaluateUntil(client, turnstileReadyExpression(), 150);
+      if (!ready) throw new Error('Turnstile 人机验证尚未完成，请打开“浏览器登录”手动验证后重试签到');
+    }
+
+    let finish;
+    const responseResult = new Promise(resolve => { finish = resolve; });
+    off = client.on('Network.responseReceived', event => {
+      let responseUrl;
+      try { responseUrl = new URL(event?.response?.url || ''); } catch { return; }
+      if (responseUrl.origin !== endpointUrl.origin || responseUrl.pathname !== endpointUrl.pathname) return;
+      client.call('Network.getResponseBody', { requestId: event.requestId }).then(result => {
+        const text = result?.base64Encoded ? Buffer.from(result.body || '', 'base64').toString('utf8') : result?.body || '';
+        let data;
+        try { data = JSON.parse(text); } catch { data = null; }
+        finish({ status: Number(event?.response?.status || 0), data, text });
+      }).catch(() => {});
+    });
+
+    const clicked = await evaluateUntil(client, clickActionExpression(options.actionText || '签到'), 25);
+    if (!clicked) throw new Error(`服务器浏览器中没有找到“${options.actionText || '签到'}”按钮，请设置正确的签到页面 path 和按钮文字`);
+    const captured = await Promise.race([
+      responseResult,
+      new Promise(resolve => setTimeout(() => resolve(null), 20000))
+    ]);
+    if (!captured) throw new Error('点击签到后没有捕获到签到接口响应');
+    if (!captured.data) throw new Error(captured.text?.slice(0, 200) || `签到接口没有返回 JSON (HTTP ${captured.status})`);
+    if (captured.status < 200 || captured.status >= 300) {
+      throw new Error(`${responseMessage(captured.data) || `HTTP ${captured.status}`} (HTTP ${captured.status})`);
+    }
+    closeWhenDone = true;
+    return captured.data;
+  } finally {
+    off();
+    client.close();
+    if (closeWhenDone) await closeTarget(target.id);
+  }
 }
 
 async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}, body = '') {

@@ -1,7 +1,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { decrypt, encrypt, mutateStore, readStore } from './store.js';
-import { accessTokenInBrowser, refreshInBrowser, requestInBrowser } from './browser.js';
+import { accessTokenInBrowser, checkinInBrowser, refreshInBrowser, requestInBrowser } from './browser.js';
 import { readInviteCount, recordInviteCount } from './invite-alerts.js';
 
 const accountRunQueues = new Map();
@@ -146,6 +146,32 @@ export function browserLoginOptions(account, env = process.env) {
     password: matched ? String(env.BROWSER_LOGIN_PASSWORD || '') : '',
     agree: matched && enabled(env.BROWSER_LOGIN_AGREE)
   };
+}
+
+export function browserCheckinOptions(account, env = process.env) {
+  const enabled = value => value === true || /^(?:1|true|yes|on)$/i.test(String(value || '').trim());
+  let hostname = '';
+  try { hostname = new URL(account.baseUrl).hostname.toLowerCase(); } catch {}
+  const identities = [account.id, account.name, account.baseUrl, hostname].map(value => String(value || '').trim().toLowerCase());
+  try {
+    const configured = JSON.parse(String(env.BROWSER_CHECKIN_ACCOUNTS_JSON || ''));
+    if (!configured || typeof configured !== 'object' || Array.isArray(configured)) return null;
+    const entry = Object.entries(configured).find(([key]) => identities.includes(String(key).trim().toLowerCase()));
+    if (!entry) return null;
+    const value = entry[1];
+    const checkin = value && typeof value === 'object' ? value : {};
+    return {
+      actionText: String(checkin.action || checkin.actionText || '签到'),
+      path: String(checkin.path || '/'),
+      turnstile: checkin.turnstile === undefined ? true : enabled(checkin.turnstile)
+    };
+  } catch { return null; }
+}
+
+async function runCheckin(account, endpoint, panelType) {
+  const browserOptions = browserCheckinOptions(account);
+  if (browserOptions) return classifyCheckin(await checkinInBrowser(account.baseUrl, endpoint, browserOptions));
+  return classifyCheckin(await call(account, endpoint, account.checkinMethod || 'POST', panelType));
 }
 
 function browserAuthHeaders(account, panelType, includeCredential = false) {
@@ -626,7 +652,7 @@ async function runNewApi(account, action) {
   if (!account.userId) throw new Error('请填写用户 ID');
   if (!account.credential && account.refreshMode !== 'browser') throw new Error('请填写登录 Cookie');
   let checkin;
-  if (action === 'checkin') checkin = classifyCheckin(await call(account, '/api/user/checkin', 'POST', 'newapi'));
+  if (action === 'checkin') checkin = await runCheckin(account, '/api/user/checkin', 'newapi');
   let config = {};
   try { config = await call(account, '/api/status', 'GET', 'public'); } catch {}
   const data = await call(account, '/api/user/self', 'GET', 'newapi');
@@ -641,7 +667,7 @@ async function runGeneric(account, action) {
   let checkin;
   if (action === 'checkin') {
     if (!account.checkinPath) throw new Error('尚未配置签到接口');
-    checkin = classifyCheckin(await call(account, account.checkinPath, account.checkinMethod || 'POST'));
+    checkin = await runCheckin(account, account.checkinPath, 'generic');
   }
   if (!account.balancePath) throw new Error('尚未配置余额接口；模型与价格功能仍可使用');
   const data = await call(account, account.balancePath, account.balanceMethod || 'GET', 'generic', false, account.balanceBody ? decrypt(account.balanceBody) : '');
