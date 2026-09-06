@@ -472,7 +472,11 @@ export function buildModelCatalog(modelsResponse, pricingResponse, quotaPerUnit 
       if (!Number.isFinite(ratio)) return null;
       const input = ratio * 1000000 / quotaPerUnit;
       const output = input * Number(x.completion_ratio || 1);
-      return { name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio, text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M${groupRatioSuffix(groupRatio)}` };
+      return {
+        name: x.model_name, category: modelCategory(x.model_name), billing: 'token', price: ratio,
+        inputPriceUsd: input, outputPriceUsd: output,
+        text: `输入 $${input.toFixed(4)} / 1M · 输出 $${output.toFixed(4)} / 1M${groupRatioSuffix(groupRatio)}`
+      };
     })
     .filter(Boolean);
   const pricedNames = new Set(priced.map(model => model.name));

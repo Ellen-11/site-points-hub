@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOneConnectorPriceLeaders, buildPriceLeaders, buildSitePrices, canonicalModelName, comparableModelName, normalizedPerCallPrice, oneConnectorModelName, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
+import { buildOneConnectorPriceLeaders, buildOneConnectorTokenPriceLeaders, buildPriceLeaders, buildSitePrices, buildTokenPriceLeaders, canonicalModelName, comparableModelName, normalizedPerCallPrice, normalizedTokenPrice, oneConnectorModelName, priceScanCandidates, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
 
 test('price leaders compare only the same exact model name', () => {
   const accounts = [
@@ -68,6 +68,38 @@ test('site price lists keep each site available for filtering', () => {
 
 test('quota prices are normalized to dollars before comparison', () => {
   assert.equal(normalizedPerCallPrice({ quotaPerUnit: 500000 }, { billing: 'call', price: 10000, priceUnit: 'quota' }), 0.02);
+});
+
+test('token price leaders compare input and output prices separately from per-call prices', () => {
+  const accounts = [
+    { id: 'a', name: 'A', quotaPerUnit: 500000, models: [{ name: 'gpt-5.6-sol', billing: 'token', price: 1, inputPriceUsd: 2, outputPriceUsd: 10 }] },
+    { id: 'b', name: 'B', quotaPerUnit: 500000, models: [{ name: 'gpt-5.6-sol-fast', billing: 'token', price: 0.75, inputPriceUsd: 1.5, outputPriceUsd: 9 }] }
+  ];
+  assert.deepEqual(normalizedTokenPrice(accounts[0], accounts[0].models[0]), { priceUsd: 2, outputPriceUsd: 10 });
+  const precise = buildTokenPriceLeaders(accounts);
+  const broad = buildOneConnectorTokenPriceLeaders(accounts);
+  assert.equal(precise[0].billing, 'token');
+  assert.equal(precise[0].accountName, 'B');
+  assert.equal(broad[0].accountName, 'B');
+  assert.equal(buildPriceLeaders(accounts).length, 0);
+});
+
+test('token price alerts keep an independent baseline', () => {
+  const db = {};
+  updatePriceWatchState(db, [{ key: 'gpt-5.6-sol', billing: 'token', modelName: 'gpt-5.6-sol', priceUsd: 2, outputPriceUsd: 10, accountId: 'a', accountName: 'A' }], new Date('2026-09-06T00:00:00Z'), 'precise', 'token');
+  assert.equal(db.priceWatch.alerts.length, 0);
+  updatePriceWatchState(db, [{ key: 'gpt-5.6-sol', billing: 'token', modelName: 'gpt-5.6-sol', priceUsd: 1.5, outputPriceUsd: 9, accountId: 'b', accountName: 'B' }], new Date('2026-09-06T01:00:00Z'), 'precise', 'token');
+  assert.equal(db.priceWatch.alerts[0].billing, 'token');
+  assert.equal(db.priceWatch.alerts[0].newOutputPriceUsd, 9);
+});
+
+test('price scans attempt every enabled site before checking its billing models', () => {
+  const candidates = priceScanCandidates([
+    { id: 'a', enabled: true, models: [] },
+    { id: 'b', models: [{ billing: 'token' }] },
+    { id: 'c', enabled: false, models: [{ billing: 'call' }] }
+  ]);
+  assert.deepEqual(candidates.map(item => item.id), ['a', 'b']);
 });
 
 test('first scan creates a baseline and later lower price creates one unread alert', () => {

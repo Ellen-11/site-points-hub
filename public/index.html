@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#fff4f8">
   <title>站点积分台</title>
-  <link rel="stylesheet" href="/style.css?v=20260906-58">
+  <link rel="stylesheet" href="/style.css?v=20260906-59">
 </head>
 <body>
 <main>
@@ -35,9 +35,9 @@
       <section class="panel logs-panel"><div id="logResults" class="log-results"></div></section>
     </div>
     <div id="priceAlertsView" class="page-view hidden">
-      <section class="stats-title"><div><p class="eyebrow">PER-CALL PRICE WATCH</p><h2>降价提醒</h2><p>同时按一个连接符和两个连接符生成两套比较；已读会直接删除，加精后持续观察后续变化。</p></div><div class="refresh-box"><small id="priceAlertsUpdatedAt">尚未扫描</small><button id="scanPrices" onclick="scanPrices()">立即扫描</button></div></section>
+      <section class="stats-title"><div><p class="eyebrow">MODEL PRICE WATCH</p><h2>降价提醒</h2><p>同时监控按次与按量价格，并按一个连接符和两个连接符生成两套比较；已读会直接删除，加精后持续观察后续变化。</p></div><div class="refresh-box"><small id="priceAlertsUpdatedAt">尚未扫描</small><button id="scanPrices" onclick="scanPrices()">立即扫描</button></div></section>
       <section class="stats price-alert-summary"><article><span>监控模型</span><strong id="priceLeaderCount">0</strong></article><article><span>未读提醒</span><strong id="priceUnreadCount">0</strong></article><article><span>监控站点</span><strong id="priceSiteCount">0</strong></article><article><span>本次失败</span><strong id="priceFailureCount">0</strong></article></section>
-      <section class="panel price-filter"><div class="grid price-filter-grid"><label>按站点筛选<select id="priceSiteFilter" onchange="renderPriceAlerts()"><option value="">全部站点</option></select></label><label>比较规则<select id="priceScopeFilter" onchange="renderPriceAlerts()"><option value="">全部规则</option><option value="broad">一个连接符</option><option value="precise">两个连接符</option></select></label><label>筛选模型<input id="priceModelFilter" placeholder="例如 gpt-5.5" oninput="renderPriceAlerts()"></label></div><p id="priceScanHint">两套规则首次扫描都只建立价格基准，不产生提醒。</p></section>
+      <section class="panel price-filter"><div class="grid price-filter-grid"><label>按站点筛选<select id="priceSiteFilter" onchange="renderPriceAlerts()"><option value="">全部站点</option></select></label><label>计费方式<select id="priceBillingFilter" onchange="renderPriceAlerts()"><option value="">全部计费</option><option value="call">按次</option><option value="token">按量</option></select></label><label>比较规则<select id="priceScopeFilter" onchange="renderPriceAlerts()"><option value="">全部规则</option><option value="broad">一个连接符</option><option value="precise">两个连接符</option></select></label><label>筛选模型<input id="priceModelFilter" placeholder="例如 gpt-5.5" oninput="renderPriceAlerts()"></label></div><p id="priceScanHint">按次与按量的两套规则首次扫描都只建立价格基准，不产生提醒。</p></section>
       <section class="panel price-history-panel"><div class="panel-heading"><h2>降价历史</h2><button class="ghost compact-button" onclick="clearPriceAlertHistory()">清除未加精</button></div><div id="priceAlertHistory" class="price-list alerts"></div></section>
     </div>
     <div id="inviteAlertsView" class="page-view hidden">
@@ -95,6 +95,6 @@
   <div id="modelCategories" class="model-categories"></div>
   <div id="modelChoices" class="model-choices"></div>
 </dialog>
-<script src="/app.js?v=20260906-58"></script>
+<script src="/app.js?v=20260906-59"></script>
 </body>
 </html>

@@ -186,6 +186,9 @@ test('left navigation includes unread per-call price alerts', () => {
   assert.doesNotMatch(html, /id="priceLeaders"/);
   assert.match(html, /id="priceAlertHistory"/);
   assert.match(html, /id="priceSiteFilter"/);
+  assert.match(html, /id="priceBillingFilter"/);
+  assert.match(html, />按次</);
+  assert.match(html, />按量</);
   assert.match(html, /id="priceScopeFilter"/);
   assert.match(html, />一个连接符</);
   assert.match(html, />两个连接符</);
