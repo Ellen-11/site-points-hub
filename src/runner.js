@@ -211,7 +211,16 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
   let refreshError = null;
   if (panelType === 'generic') {
     try {
-      if (await refreshBearer(account)) return { retry: true };
+      if (await refreshBearer(account)) {
+        if (account.refreshMode !== 'browser') return { retry: true };
+        try {
+          const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
+          return { data };
+        } catch (error) {
+          if (isRateLimitedError(error)) throw error;
+          refreshError = error;
+        }
+      }
     } catch (error) {
       if (isRateLimitedError(error)) throw error;
       refreshError = error;
