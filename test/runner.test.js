@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
-import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -43,6 +43,16 @@ test('browser recovery retries twice and stops immediately after success', async
   attempts = 0;
   assert.equal(await retryTwice(async () => { attempts++; return 'ready'; }), 'ready');
   assert.equal(attempts, 1);
+});
+
+test('browser recovery never retries HTTP 429 rate limits', async () => {
+  let attempts = 0;
+  await assert.rejects(() => retryTwice(async () => {
+    attempts++;
+    throw new Error('Too many requests (HTTP 429)');
+  }, 0, error => !isRateLimitedError(error)), /429/);
+  assert.equal(attempts, 1);
+  assert.equal(isRateLimitedError(new Error('请求过于频繁')), true);
 });
 
 test('reads bearer tokens captured from browser network requests', () => {

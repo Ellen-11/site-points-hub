@@ -92,10 +92,17 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
   return !retried && panelType !== 'public' && account.refreshMode === 'browser';
 }
 
-export async function retryTwice(task, delayMs = 0) {
+export function isRateLimitedError(error) {
+  return /(?:HTTP\s*)?429\b|too many requests|rate.?limit|请求过于频繁|访问过于频繁|频率限制/i.test(String(error?.message || error || ''));
+}
+
+export async function retryTwice(task, delayMs = 0, shouldRetry = () => true) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    try { return await task(attempt); } catch (error) { lastError = error; }
+    try { return await task(attempt); } catch (error) {
+      lastError = error;
+      if (!shouldRetry(error)) throw error;
+    }
     if (attempt < 2 && delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
   throw lastError;
@@ -162,16 +169,19 @@ async function recoverWithBrowserOnce(account, endpoint, method, panelType, body
         return { data };
       } catch (error) {
         account.browserAccessToken = previousBrowserAccessToken;
+        if (isRateLimitedError(error)) throw error;
         throw error;
       }
     }
   } catch (error) {
+    if (isRateLimitedError(error)) throw error;
     browserError = error;
   }
   try {
     const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType), body);
     return { data };
   } catch (error) {
+    if (isRateLimitedError(error)) throw error;
     browserError = error;
   }
   if ((account.browserAccessToken || (panelType === 'generic' && account.credential)) && (panelType === 'newapi' || ['bearer', 'header'].includes(account.authType))) {
@@ -179,6 +189,7 @@ async function recoverWithBrowserOnce(account, endpoint, method, panelType, body
       const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
       return { data };
     } catch (error) {
+      if (isRateLimitedError(error)) throw error;
       browserError = error;
     }
   }
@@ -192,13 +203,15 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
     try {
       if (await refreshBearer(account)) return { retry: true };
     } catch (error) {
+      if (isRateLimitedError(error)) throw error;
       refreshError = error;
     }
   }
   if (shouldUseBrowserSession(account, panelType, retried)) {
     try {
-      return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body), 600);
+      return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body), 600, error => !isRateLimitedError(error));
     } catch (error) {
+      if (isRateLimitedError(error)) throw new Error(`站点请求过于频繁 (HTTP 429)，已停止自动重试，请稍后再试`);
       const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
       throw new Error(`服务器浏览器登录态无效，自动重试两次后仍未取得可用令牌，请点击“浏览器登录”重新登录：${error.message}${details}`);
     }
