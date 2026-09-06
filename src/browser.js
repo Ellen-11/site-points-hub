@@ -1,6 +1,6 @@
 const cdpBase = process.env.BROWSER_CDP_URL || 'http://127.0.0.1:9222';
 
-async function cdpTarget(url) {
+async function cdpTarget(url, { activate = true } = {}) {
   let response;
   try {
     response = await fetch(`${cdpBase}/json/new?${encodeURIComponent(url)}`, { method: 'PUT', signal: AbortSignal.timeout(10000) });
@@ -9,7 +9,7 @@ async function cdpTarget(url) {
   }
   if (!response.ok) throw new Error(`服务器浏览器不可用 (HTTP ${response.status})`);
   const target = await response.json();
-  await fetch(`${cdpBase}/json/activate/${encodeURIComponent(target.id)}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+  if (activate) await fetch(`${cdpBase}/json/activate/${encodeURIComponent(target.id)}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
   return target;
 }
 
@@ -62,6 +62,41 @@ export function bearerTokenFromHeaders(headers = {}, ignoredTokens = []) {
   const entry = Object.entries(headers).find(([name]) => name.toLowerCase() === 'authorization');
   const token = String(entry?.[1] || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
   return token && !new Set(ignoredTokens).has(token) ? token : '';
+}
+
+export function bearerTokenFromResponseText(text = '', ignoredTokens = []) {
+  let data;
+  try { data = JSON.parse(String(text || '')); } catch { return ''; }
+  const ignored = new Set(ignoredTokens);
+  const tokenPattern = /^(?:eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|[A-Za-z0-9_-]{24,})$/;
+  const visit = (value, key = '', depth = 0) => {
+    if (depth > 5 || value == null) return '';
+    if (typeof value === 'string') {
+      const clean = value.trim().replace(/^Bearer\s+/i, '');
+      if (/refresh|api.?key/i.test(key) || !/(?:^|[_-])(?:access[_-]?)?token$/i.test(key)) return '';
+      return tokenPattern.test(clean) && !ignored.has(clean) ? clean : '';
+    }
+    if (typeof value !== 'object') return '';
+    for (const [childKey, childValue] of Object.entries(value)) {
+      const found = visit(childValue, childKey, depth + 1);
+      if (found) return found;
+    }
+    return '';
+  };
+  return visit(data);
+}
+
+function responseTokenListener(client, finish, ignoredTokens = [], ready = () => true) {
+  return client.on('Network.responseReceived', event => {
+    if (!ready()) return;
+    const contentType = String(event?.response?.mimeType || event?.response?.headers?.['content-type'] || event?.response?.headers?.['Content-Type'] || '');
+    if (!/json/i.test(contentType)) return;
+    client.call('Network.getResponseBody', { requestId: event.requestId }).then(result => {
+      const text = result?.base64Encoded ? Buffer.from(result.body || '', 'base64').toString('utf8') : result?.body || '';
+      const token = bearerTokenFromResponseText(text, ignoredTokens);
+      if (token) finish(token);
+    }).catch(() => {});
+  });
 }
 
 export function normalizeLoginActionText(value = '') {
@@ -124,9 +159,11 @@ async function tokenFromTarget(target, reload = false, ignoredTokens = []) {
       const token = bearerTokenFromHeaders(event?.request?.headers, ignoredTokens);
       if (token) finish(token);
     });
+    const offResponse = responseTokenListener(client, finish, ignoredTokens);
     await client.call('Page.reload', { ignoreCache: true });
     const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 6000))]);
     off();
+    offResponse();
     return token;
   } finally {
     client.close();
@@ -161,6 +198,7 @@ async function performLoginAction(target, options = {}) {
       const token = bearerTokenFromHeaders(event?.request?.headers, options.ignoredTokens || []);
       if (token) finish(token);
     });
+    const offResponse = responseTokenListener(client, finish, options.ignoredTokens || [], () => captureReady);
     const formReadyExpression = `(() => [...document.querySelectorAll('input[type="password"]')].some(element => !element.disabled && element.getClientRects().length))()`;
     let clicked = hasCredentials && await evaluateUntil(client, formReadyExpression, 5);
     const clickExpression = `(() => {
@@ -232,6 +270,7 @@ async function performLoginAction(target, options = {}) {
       }
     }
     const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 10000))]);
+    offResponse();
     return { clicked: true, token };
   } finally {
     off();
@@ -262,11 +301,20 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
     const token = await tokenFromTarget(target, false, loginOptions.ignoredTokens);
     if (token) return token;
   }
-  if (existing[0] && loginOptions.actionText) {
-    const token = await recoverTokenWithLoginAction(existing[0], loginOptions, origin);
+  const ordered = [...existing].sort((left, right) => {
+    const score = target => /(?:login|sign[-_]?in|auth)/i.test(String(target.url || '')) ? 1 : 0;
+    return score(right) - score(left);
+  });
+  if (loginOptions.actionText) {
+    for (const target of ordered.slice(0, 3)) {
+      const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
+      if (token) return token;
+    }
+  }
+  for (const target of ordered.slice(0, 3)) {
+    const token = await tokenFromTarget(target, true, loginOptions.ignoredTokens);
     if (token) return token;
   }
-  if (existing[0]) return tokenFromTarget(existing[0], true, loginOptions.ignoredTokens);
 
   const target = await cdpTarget(new URL('/', baseUrl).href);
   let closeWhenDone = false;
@@ -315,7 +363,7 @@ export async function openBrowserLogin(baseUrl) {
 }
 
 async function fetchInBrowser(baseUrl, endpoint, method = 'GET', headers = {}, body = '') {
-  const target = await cdpTarget(new URL('/', baseUrl).href);
+  const target = await cdpTarget(new URL('/', baseUrl).href, { activate: false });
   const client = await connectCdp(target.webSocketDebuggerUrl);
   try {
     const origin = new URL(baseUrl).origin;

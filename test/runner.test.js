@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
+import { bearerTokenFromHeaders, bearerTokenFromResponseText, normalizeLoginActionText } from '../src/browser.js';
 import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isAuthenticationError, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
@@ -61,6 +61,14 @@ test('reads bearer tokens captured from browser network requests', () => {
   assert.equal(bearerTokenFromHeaders({ Authorization: 'Bearer browser-token' }), 'browser-token');
   assert.equal(bearerTokenFromHeaders({ Authorization: 'Bearer stale-token' }, ['stale-token']), '');
   assert.equal(bearerTokenFromHeaders({ authorization: 'Basic abc' }), '');
+});
+
+test('reads access tokens returned directly by browser login responses', () => {
+  const token = 'eyJheader.payload.signature';
+  assert.equal(bearerTokenFromResponseText(JSON.stringify({ data: { access_token: token } })), token);
+  assert.equal(bearerTokenFromResponseText(JSON.stringify({ data: { refresh_token: token } })), '');
+  assert.equal(bearerTokenFromResponseText(JSON.stringify({ token: 'short' })), '');
+  assert.equal(bearerTokenFromResponseText(JSON.stringify({ accessToken: token }), [token]), '');
 });
 
 test('normalizes configured browser login button text', () => {
