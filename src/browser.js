@@ -1,4 +1,30 @@
 const cdpBase = process.env.BROWSER_CDP_URL || 'http://127.0.0.1:9222';
+const maxBrowserPages = Math.max(1, Math.min(8, Number(process.env.BROWSER_MAX_TABS || 3) || 3));
+
+async function pageTargets() {
+  const response = await fetch(`${cdpBase}/json/list`, { signal: AbortSignal.timeout(5000) });
+  if (!response.ok) return [];
+  const targets = await response.json();
+  return targets.filter(target => target.type === 'page' && target.id && target.webSocketDebuggerUrl);
+}
+
+export function browserTargetIdsToClose(targets = [], keepIds = [], maximum = 3) {
+  const pages = targets.filter(target => target?.type === 'page' && target.id);
+  const limit = Math.max(1, Number(maximum) || 3);
+  const requested = new Set((Array.isArray(keepIds) ? keepIds : [keepIds]).filter(Boolean));
+  const survivors = new Set(pages.filter(target => requested.has(target.id)).slice(0, limit).map(target => target.id));
+  for (const target of pages) {
+    if (survivors.size >= limit) break;
+    survivors.add(target.id);
+  }
+  return pages.filter(target => !survivors.has(target.id)).map(target => target.id);
+}
+
+async function pruneBrowserTargets(keepIds = []) {
+  const targets = await pageTargets().catch(() => []);
+  const ids = browserTargetIdsToClose(targets, keepIds, maxBrowserPages);
+  await Promise.all(ids.map(id => closeTarget(id)));
+}
 
 async function cdpTarget(url, { activate = true } = {}) {
   let response;
@@ -10,6 +36,7 @@ async function cdpTarget(url, { activate = true } = {}) {
   if (!response.ok) throw new Error(`服务器浏览器不可用 (HTTP ${response.status})`);
   const target = await response.json();
   if (activate) await fetch(`${cdpBase}/json/activate/${encodeURIComponent(target.id)}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+  await pruneBrowserTargets([target.id]);
   return target;
 }
 
@@ -134,10 +161,8 @@ function storedTokenExpression() {
 }
 
 async function existingOriginTargets(origin) {
-  const response = await fetch(`${cdpBase}/json/list`, { signal: AbortSignal.timeout(5000) });
-  if (!response.ok) return [];
-  const targets = await response.json();
-  return targets.filter(target => target.type === 'page' && target.webSocketDebuggerUrl && (() => {
+  const targets = await pageTargets();
+  return targets.filter(target => (() => {
     try { return new URL(target.url).origin === origin; } catch { return false; }
   })());
 }
@@ -353,7 +378,7 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
   }
 
   const target = await cdpTarget(new URL('/', baseUrl).href);
-  let closeWhenDone = false;
+  let closeWhenDone = freshAutomatedLogin;
   try {
     const client = await connectCdp(target.webSocketDebuggerUrl);
     try {
@@ -394,6 +419,13 @@ export async function browserAvailable() {
 
 export async function openBrowserLogin(baseUrl) {
   const url = new URL(baseUrl).href;
+  const origin = new URL(url).origin;
+  const existing = (await existingOriginTargets(origin).catch(() => []))[0];
+  if (existing) {
+    await fetch(`${cdpBase}/json/activate/${encodeURIComponent(existing.id)}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+    await pruneBrowserTargets([existing.id]);
+    return { ok: true, url: existing.url || url, reused: true };
+  }
   await cdpTarget(url);
   return { ok: true, url };
 }

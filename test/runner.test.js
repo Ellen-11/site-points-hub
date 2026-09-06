@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bearerTokenFromHeaders, bearerTokenFromResponseText, normalizeLoginActionText } from '../src/browser.js';
+import { bearerTokenFromHeaders, bearerTokenFromResponseText, browserTargetIdsToClose, normalizeLoginActionText } from '../src/browser.js';
 import { browserCheckinOptions, browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isAuthenticationError, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
@@ -74,6 +74,17 @@ test('reads access tokens returned directly by browser login responses', () => {
 test('normalizes configured browser login button text', () => {
   assert.equal(normalizeLoginActionText(' Sign up '), 'signup');
   assert.equal(normalizeLoginActionText('SIGN-UP'), 'signup');
+});
+
+test('server browser keeps the active page and caps accumulated tabs', () => {
+  const targets = [
+    { id: 'old-a', type: 'page' },
+    { id: 'active', type: 'page' },
+    { id: 'old-b', type: 'page' },
+    { id: 'old-c', type: 'page' },
+    { id: 'worker', type: 'service_worker' }
+  ];
+  assert.deepEqual(browserTargetIdsToClose(targets, ['active'], 3), ['old-c']);
 });
 
 test('loads browser login credentials from scoped environment variables', () => {
