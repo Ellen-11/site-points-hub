@@ -1,5 +1,5 @@
 const $ = s => document.querySelector(s);
-let accounts = []; let tags = []; let dashboardData = null; let activeFilter = '';
+let accounts = []; let tags = []; let dashboardData = null; let activeFilter = ''; let activeStatusFilter = '';
 let priceAlertData = null; let inviteAlertData = null;
 
 async function api(url, options = {}) {
@@ -19,6 +19,10 @@ function priceWithEstimate(price = {}) {
   if (price.estimatedCalls === 'unlimited') return `${price.text} · 预计不限次数`;
   if (Number.isInteger(price.estimatedCalls)) return `${price.text} · 预计还可 ${price.estimatedCalls.toLocaleString()} 次`;
   return `${price.text} · 刷新余额后估算`;
+}
+
+function filteredAccounts(list = accounts) {
+  return list.filter(account => (!activeFilter || (account.tags || []).includes(activeFilter)) && (!activeStatusFilter || account.lastStatus === activeStatusFilter));
 }
 
 function setPriceAlertBadge(count = 0) {
@@ -65,13 +69,17 @@ function render(data) {
   $('#siteCount').textContent = data.accounts.length;
   $('#okCount').textContent = data.accounts.filter(x => x.lastStatus === 'ok').length;
   $('#errorCount').textContent = data.accounts.filter(x => x.lastStatus === 'error').length;
+  $('#errorStat').classList.toggle('active', activeStatusFilter === 'error');
+  $('#errorStat').setAttribute('aria-pressed', String(activeStatusFilter === 'error'));
+  $('#errorStat').title = activeStatusFilter === 'error' ? '再次点击显示全部状态' : '点击只看异常站点';
+  $('#errorFilterHint').textContent = activeStatusFilter === 'error' ? '正在只看异常 · 再点取消' : '点击筛选异常站点';
   setPriceAlertBadge(data.priceAlertUnreadCount || 0);
   setInviteAlertBadge(data.inviteAlertUnreadCount || 0);
   const allTags = [...new Set(data.tags || [])].sort((a, b) => a.localeCompare(b));
   const enabledTags = new Set(data.pollTags || []);
   $('#pollTags').innerHTML = allTags.map(tag => `<span class="tag-item"><button class="tag-toggle ${enabledTags.has(tag) ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="togglePollTag(this.dataset.tag,${!enabledTags.has(tag)})">${enabledTags.has(tag) ? '✓ ' : ''}${esc(tag)}</button><button class="tag-delete" data-tag="${esc(tag)}" onclick="deleteTag(this.dataset.tag)" title="删除标签">×</button></span>`).join('') || '<span class="hint">先在这里添加一个标签。</span>';
   $('#filterTags').innerHTML = `<button class="tag-toggle ${activeFilter ? 'ghost' : 'active'}" onclick="setTagFilter('')">全部</button>` + allTags.map(tag => `<button class="tag-toggle ${activeFilter === tag ? 'active' : 'ghost'}" data-tag="${esc(tag)}" onclick="setTagFilter(this.dataset.tag)">${esc(tag)}</button>`).join('');
-  const visibleAccounts = activeFilter ? data.accounts.filter(account => (account.tags || []).includes(activeFilter)) : data.accounts;
+  const visibleAccounts = filteredAccounts(data.accounts);
   $('#cards').innerHTML = visibleAccounts.length ? visibleAccounts.map(a => `
     <article class="card" draggable="true" ondragstart="startAccountDrag(event,'${a.id}')" ondragover="dragAccountOver(event)" ondragleave="this.classList.remove('drag-over')" ondrop="dropAccount(event,'${a.id}')" ondragend="endAccountDrag(event)">
       <div class="top"><strong>${esc(a.name)}</strong><span class="drag-handle" title="拖动排序">⋮⋮</span><span class="status ${a.lastStatus === 'error' ? 'error' : ''}">${a.lastStatus === 'error' ? '异常' : a.lastStatus === 'ok' ? '正常' : '未运行'}</span></div>
@@ -82,7 +90,7 @@ function render(data) {
       <div class="model-box"><strong>${esc(a.modelName || '尚未选择模型')}</strong><span>${esc(priceWithEstimate(a.modelPrice) || (a.hasApiKey ? '点击选择模型并查看价格' : '请先编辑并填写 API Key'))}</span></div>
       <p class="meta">${a.lastError ? esc(a.lastError) : a.lastCheckinMessage ? esc(a.lastCheckinMessage) : a.lastCheckedAt ? '更新于 ' + new Date(a.lastCheckedAt).toLocaleString() : '等待首次刷新'}</p>
       <div class="card-actions"><button onclick="run('${a.id}','poll',this)">刷新</button><button class="secondary" onclick="run('${a.id}','checkin',this)">签到</button><button class="ghost" onclick="openTagPicker('${a.id}')">选择标签</button><button class="ghost" onclick="openModels('${a.id}')">选择模型</button><button class="ghost" onclick="testModel('${a.id}',this)">测试模型</button>${a.refreshMode === 'browser' ? `<button class="ghost" onclick="openServerBrowser('${a.id}')">浏览器登录</button>` : ''}<button class="ghost" onclick="edit('${a.id}')">编辑</button><button class="ghost" onclick="removeAccount('${a.id}')">删除</button></div>
-    </article>`).join('') : `<article class="panel"><p>${activeFilter ? '这个标签下还没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
+    </article>`).join('') : `<article class="panel"><p>${activeStatusFilter ? '当前筛选下没有异常站点。' : activeFilter ? '这个标签下还没有站点。' : '还没有站点，先添加一个。'}</p></article>`;
 }
 
 window.showView = view => {
@@ -295,6 +303,7 @@ window.loadLogs = async () => {
 for (const selector of ['#logAction', '#logStatus', '#logAccount']) document.addEventListener('change', event => { if (event.target.matches(selector)) loadLogs(); });
 
 window.setTagFilter = tag => { activeFilter = tag; render(dashboardData); };
+window.toggleErrorFilter = () => { activeStatusFilter = activeStatusFilter === 'error' ? '' : 'error'; render(dashboardData); };
 let draggedAccount = '';
 window.startAccountDrag = (event, id) => { draggedAccount = id; event.dataTransfer.effectAllowed = 'move'; event.currentTarget.classList.add('dragging'); };
 window.dragAccountOver = event => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; event.currentTarget.classList.add('drag-over'); };
@@ -302,7 +311,7 @@ window.endAccountDrag = event => { event.currentTarget.classList.remove('draggin
 window.dropAccount = async (event, targetId) => {
   event.preventDefault(); event.currentTarget.classList.remove('drag-over');
   if (!draggedAccount || draggedAccount === targetId) return;
-  const visible = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
+  const visible = filteredAccounts(accounts);
   const from = visible.findIndex(account => account.id === draggedAccount); const target = visible.findIndex(account => account.id === targetId);
   if (from < 0 || target < 0) return;
   const [moved] = visible.splice(from, 1); const rect = event.currentTarget.getBoundingClientRect();
@@ -456,7 +465,7 @@ window.deleteTag = async tag => {
 };
 window.removeAccount = async id => { if (confirm('确定删除这个站点？')) { await api(`/api/accounts/${id}`, { method: 'DELETE' }); load(); } };
 async function runBatch(action, button) {
-  const targets = activeFilter ? accounts.filter(account => (account.tags || []).includes(activeFilter)) : [...accounts];
+  const targets = filteredAccounts(accounts);
   if (!targets.length) return alert('当前筛选下没有可执行的站点。');
   const original = button.textContent; let ok = 0; let failed = 0; button.disabled = true;
   try {

@@ -126,7 +126,12 @@ test('polling is controlled by account tags', () => {
 });
 
 test('tag filter and order controls are available', () => {
+  const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(html, /id="errorStat"/);
+  assert.match(html, /onclick="toggleErrorFilter\(\)"/);
+  assert.match(source, /activeStatusFilter/);
+  assert.match(source, /filteredAccounts/);
   assert.match(source, /setTagFilter/);
   assert.match(source, /draggable="true"/);
   assert.match(source, /dropAccount/);
@@ -147,7 +152,7 @@ test('batch actions visibly run tagged sites one by one', () => {
   assert.match(source, /async function runBatch/);
   assert.match(source, /for \(let index = 0; index < targets\.length/);
   assert.match(source, /正在.*\$\{index \+ 1\}\/\$\{targets\.length\}/);
-  assert.match(source, /const targets = activeFilter/);
+  assert.match(source, /const targets = filteredAccounts\(accounts\)/);
   assert.match(source, /当前筛选下没有可执行的站点/);
 });
 
