@@ -86,6 +86,13 @@ test('server browser routes require the admin session', () => {
   assert.match(startup, /x11vnc .* -localhost/);
 });
 
+test('manual refresh shows progress while browser recovery runs', () => {
+  const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  assert.match(source, /run\('\$\{a\.id\}','poll',this\)/);
+  assert.match(source, /刷新中…/);
+  assert.match(source, /签到中…/);
+});
+
 test('account save reports server validation errors and shows progress', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');

@@ -8,7 +8,9 @@ async function cdpTarget(url) {
     throw new Error(`服务器浏览器未启动：${error.cause?.code || error.message}`);
   }
   if (!response.ok) throw new Error(`服务器浏览器不可用 (HTTP ${response.status})`);
-  return response.json();
+  const target = await response.json();
+  await fetch(`${cdpBase}/json/activate/${encodeURIComponent(target.id)}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+  return target;
 }
 
 async function closeTarget(id) {
@@ -271,6 +273,9 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
       await client.call('Runtime.enable');
       await waitForOrigin(client, origin);
     } finally { client.close(); }
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const existingToken = await tokenFromTarget(target, false, loginOptions.ignoredTokens);
+    if (existingToken) return existingToken;
     if (loginOptions.actionText) {
       const token = await recoverTokenWithLoginAction(target, loginOptions, origin);
       if (token) return token;
@@ -283,7 +288,7 @@ async function waitForOrigin(client, origin) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const result = await client.call('Runtime.evaluate', { expression: '({ origin: location.origin, ready: document.readyState })', returnByValue: true });
     const value = result?.result?.value;
-    if (value?.origin === origin && value.ready !== 'loading') return;
+    if (value?.origin === origin && value.ready === 'complete') return;
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   throw new Error('服务器浏览器打开站点超时');
