@@ -92,6 +92,15 @@ export function shouldUseBrowserSession(account, panelType = 'generic', retried 
   return !retried && panelType !== 'public' && account.refreshMode === 'browser';
 }
 
+export async function retryTwice(task, delayMs = 0) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try { return await task(attempt); } catch (error) { lastError = error; }
+    if (attempt < 2 && delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  throw lastError;
+}
+
 export function browserLoginOptions(account, env = process.env) {
   const enabled = value => value === true || /^(?:1|true|yes|on)$/i.test(String(value || '').trim());
   let hostname = '';
@@ -133,6 +142,45 @@ function browserAuthHeaders(account, panelType, includeCredential = false) {
   return headers;
 }
 
+async function recoverWithBrowserOnce(account, endpoint, method, panelType, body) {
+  let browserError;
+  try {
+    const token = await accessTokenInBrowser(account.baseUrl, browserLoginOptions(account));
+    if (token) {
+      const previousBrowserAccessToken = account.browserAccessToken;
+      account.browserAccessToken = encrypt(token);
+      try {
+        const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
+        mutateStore(latest => {
+          const saved = latest.accounts.find(item => item.id === account.id);
+          if (saved) saved.browserAccessToken = account.browserAccessToken;
+        });
+        return { data };
+      } catch (error) {
+        account.browserAccessToken = previousBrowserAccessToken;
+        throw error;
+      }
+    }
+  } catch (error) {
+    browserError = error;
+  }
+  try {
+    const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType), body);
+    return { data };
+  } catch (error) {
+    browserError = error;
+  }
+  if ((account.browserAccessToken || (panelType === 'generic' && account.credential)) && (panelType === 'newapi' || ['bearer', 'header'].includes(account.authType))) {
+    try {
+      const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
+      return { data };
+    } catch (error) {
+      browserError = error;
+    }
+  }
+  throw browserError || new Error('服务器浏览器未取得可用登录态');
+}
+
 async function recoverAuthentication(account, endpoint, method, panelType, retried, body = '') {
   if (retried || panelType === 'public') return null;
   let refreshError = null;
@@ -144,43 +192,12 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
     }
   }
   if (shouldUseBrowserSession(account, panelType, retried)) {
-    let browserError;
     try {
-      const token = await accessTokenInBrowser(account.baseUrl, browserLoginOptions(account));
-      if (token) {
-        const previousBrowserAccessToken = account.browserAccessToken;
-        account.browserAccessToken = encrypt(token);
-        try {
-          const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
-          mutateStore(latest => {
-            const saved = latest.accounts.find(item => item.id === account.id);
-            if (saved) saved.browserAccessToken = account.browserAccessToken;
-          });
-          return { data };
-        } catch (error) {
-          account.browserAccessToken = previousBrowserAccessToken;
-          throw error;
-        }
-      }
+      return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body), 600);
     } catch (error) {
-      browserError = error;
+      const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
+      throw new Error(`服务器浏览器登录态无效，自动重试两次后仍未取得可用令牌，请点击“浏览器登录”重新登录：${error.message}${details}`);
     }
-    try {
-      const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType), body);
-      return { data };
-    } catch (error) {
-      browserError = error;
-    }
-    if ((account.browserAccessToken || (panelType === 'generic' && account.credential)) && (panelType === 'newapi' || ['bearer', 'header'].includes(account.authType))) {
-      try {
-        const data = await requestInBrowser(account.baseUrl, endpoint, method, browserAuthHeaders(account, panelType, true), body);
-        return { data };
-      } catch (error) {
-        browserError = error;
-      }
-    }
-    const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
-    throw new Error(`服务器浏览器登录态无效，浏览器中也未取得可用令牌，请点击“浏览器登录”重新登录：${browserError.message}${details}`);
   }
   if (refreshError) throw refreshError;
   return null;

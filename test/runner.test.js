@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
-import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -28,6 +28,21 @@ test('uses the persistent server browser as a fallback for generic session accou
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'newapi'), true);
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'public'), false);
   assert.equal(shouldUseBrowserSession({ refreshMode: 'browser' }, 'generic', true), false);
+});
+
+test('browser recovery retries twice and stops immediately after success', async () => {
+  let attempts = 0;
+  const result = await retryTwice(async () => {
+    attempts++;
+    if (attempts < 3) throw new Error('temporary login failure');
+    return 'ok';
+  });
+  assert.equal(result, 'ok');
+  assert.equal(attempts, 3);
+
+  attempts = 0;
+  assert.equal(await retryTwice(async () => { attempts++; return 'ready'; }), 'ready');
+  assert.equal(attempts, 1);
 });
 
 test('reads bearer tokens captured from browser network requests', () => {
