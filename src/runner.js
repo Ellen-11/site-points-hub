@@ -60,6 +60,10 @@ async function refreshBearer(account) {
     const token = tokenFromRefresh(data);
     if (!token) throw new Error('服务器浏览器刷新成功，但响应中没有新的 Access Token');
     account.credential = encrypt(token);
+    // Browser-mode requests prefer browserAccessToken. Replace it too, or the
+    // freshly refreshed credential is immediately overwritten by the expired
+    // browser token on the retry.
+    account.browserAccessToken = encrypt(token);
     return true;
   }
   if (!account.refreshCookie) return false;
