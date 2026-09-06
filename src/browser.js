@@ -191,12 +191,19 @@ async function performLoginAction(target, options = {}) {
     await client.call('Network.enable');
     const hasCredentials = Boolean(options.username && options.password);
     let captureReady = !hasCredentials;
+    let requestToken = '';
     let finish;
     const captured = new Promise(resolve => { finish = resolve; });
     off = client.on('Network.requestWillBeSent', event => {
       if (!captureReady) return;
       const token = bearerTokenFromHeaders(event?.request?.headers, options.ignoredTokens || []);
-      if (token) finish(token);
+      if (!token) return;
+      requestToken = token;
+      // A stale page can fire one last request with its expired token while the
+      // login form is being submitted. With credentials configured, wait for
+      // the login response body first and only use the newest request token as
+      // a timeout fallback.
+      if (!hasCredentials) finish(token);
     });
     const offResponse = responseTokenListener(client, finish, options.ignoredTokens || [], () => captureReady);
     const formReadyExpression = `(() => [...document.querySelectorAll('input[type="password"]')].some(element => !element.disabled && element.getClientRects().length))()`;
@@ -271,7 +278,7 @@ async function performLoginAction(target, options = {}) {
     }
     const token = await Promise.race([captured, new Promise(resolve => setTimeout(() => resolve(''), 10000))]);
     offResponse();
-    return { clicked: true, token };
+    return { clicked: true, token: token || requestToken };
   } finally {
     off();
     client.close();
