@@ -61,11 +61,31 @@ function normalizedModelPrice(account, model, billing) {
   return priceUsd === null ? null : { priceUsd, outputPriceUsd: null };
 }
 
+function roundedVisiblePrice(value, billing = 'call') {
+  if (value === null || value === undefined) return NaN;
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return NaN;
+  const digits = amount !== 0 && Math.abs(amount) < 0.0001 ? 8 : billing === 'token' ? 4 : 6;
+  return Number(amount.toFixed(digits));
+}
+
 function comparePrices(left, right) {
-  if (left.priceUsd !== right.priceUsd) return left.priceUsd - right.priceUsd;
-  const leftOutput = Number.isFinite(Number(left.outputPriceUsd)) ? Number(left.outputPriceUsd) : left.priceUsd;
-  const rightOutput = Number.isFinite(Number(right.outputPriceUsd)) ? Number(right.outputPriceUsd) : right.priceUsd;
+  const billing = left.billing || right.billing || 'call';
+  const leftInput = roundedVisiblePrice(left.priceUsd, billing);
+  const rightInput = roundedVisiblePrice(right.priceUsd, billing);
+  if (leftInput !== rightInput) return leftInput - rightInput;
+  const leftOutput = left.outputPriceUsd === null || left.outputPriceUsd === undefined ? leftInput : roundedVisiblePrice(left.outputPriceUsd, billing);
+  const rightOutput = right.outputPriceUsd === null || right.outputPriceUsd === undefined ? rightInput : roundedVisiblePrice(right.outputPriceUsd, billing);
   return leftOutput - rightOutput;
+}
+
+function meaningfulPriceAlert(alert) {
+  if (alert.kind !== 'drop' || alert.oldPriceUsd === null || alert.oldPriceUsd === undefined) return true;
+  const billing = alert.billing || 'call';
+  return comparePrices(
+    { billing, priceUsd: alert.newPriceUsd, outputPriceUsd: alert.newOutputPriceUsd },
+    { billing, priceUsd: alert.oldPriceUsd, outputPriceUsd: alert.oldOutputPriceUsd }
+  ) < 0;
 }
 
 function buildLeaders(accounts, comparisonName, scope, billing = 'call') {
@@ -219,7 +239,7 @@ export function updatePriceWatchState(db, leaders, now = new Date(), scope = 'pr
 
 export function priceAlertsView(db = readStore()) {
   const watch = db.priceWatch || {};
-  const alerts = Array.isArray(watch.alerts) ? [...watch.alerts].sort((a, b) => {
+  const alerts = Array.isArray(watch.alerts) ? [...watch.alerts].filter(meaningfulPriceAlert).sort((a, b) => {
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
     const aTime = a.pinned ? a.pinnedAt || a.detectedAt : a.detectedAt;
     const bTime = b.pinned ? b.pinnedAt || b.detectedAt : b.detectedAt;

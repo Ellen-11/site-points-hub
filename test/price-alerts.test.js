@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOneConnectorPriceLeaders, buildOneConnectorTokenPriceLeaders, buildPriceLeaders, buildSitePrices, buildTokenPriceLeaders, canonicalModelName, comparableModelName, normalizedPerCallPrice, normalizedTokenPrice, oneConnectorModelName, priceScanCandidates, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
+import { buildOneConnectorPriceLeaders, buildOneConnectorTokenPriceLeaders, buildPriceLeaders, buildSitePrices, buildTokenPriceLeaders, canonicalModelName, comparableModelName, normalizedPerCallPrice, normalizedTokenPrice, oneConnectorModelName, priceAlertsView, priceScanCandidates, updatePinnedPriceAlerts, updatePriceWatchState } from '../src/price-alerts.js';
 
 test('price leaders compare only the same exact model name', () => {
   const accounts = [
@@ -111,6 +111,22 @@ test('first scan creates a baseline and later lower price creates one unread ale
   assert.equal(db.priceWatch.alerts[0].unread, true);
   updatePriceWatchState(db, [{ key: 'gpt-5.5', modelName: 'gpt-5.5', priceUsd: 0.02, accountId: 'b', accountName: 'B' }], new Date('2026-09-05T02:00:00Z'));
   assert.equal(db.priceWatch.alerts.length, 1);
+});
+
+test('prices that render identically do not create or display a false drop alert', () => {
+  const db = {};
+  updatePriceWatchState(db, [{ key: 'grok-4.1', modelName: 'grok-4.1', priceUsd: 0.02500000001, accountId: 'a', accountName: 'A' }]);
+  const created = updatePriceWatchState(db, [{ key: 'grok-4.1', modelName: 'grok-4.1', priceUsd: 0.025, accountId: 'b', accountName: 'B' }]);
+  assert.equal(created.length, 0);
+
+  db.priceWatch.alerts = [{
+    id: 'legacy-rounding-alert', kind: 'drop', unread: true, billing: 'call',
+    modelName: 'grok-4.1', oldPriceUsd: 0.02500000001, newPriceUsd: 0.025,
+    accountId: 'b', accountName: 'B', detectedAt: new Date().toISOString()
+  }];
+  const view = priceAlertsView(db);
+  assert.equal(view.alerts.length, 0);
+  assert.equal(view.unreadCount, 0);
 });
 
 test('pinned alert tracks price increases and model disappearance', () => {
