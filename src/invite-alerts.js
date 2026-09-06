@@ -44,15 +44,14 @@ export function recordInviteCount(db, account, count, now = new Date()) {
 }
 
 export function inviteAlertsView(db = readStore()) {
+  const watch = db.inviteWatch || {};
   const alerts = [...(db.inviteWatch?.alerts || [])].sort((a, b) => String(b.detectedAt || '').localeCompare(String(a.detectedAt || '')));
   const monitored = (db.accounts || []).filter(account => Number.isFinite(Number(account.inviteCount)) && account.inviteCount !== null);
-  const counts = monitored.map(account => ({
-    accountId: account.id,
-    accountName: account.name,
-    url: account.baseUrl,
-    count: Math.max(0, Math.trunc(Number(account.inviteCount))),
-    checkedAt: account.inviteCountCheckedAt || null
-  })).sort((a, b) => b.count - a.count || a.accountName.localeCompare(b.accountName));
+  const accounts = new Map((db.accounts || []).map(account => [account.id, account]));
+  const recentAdditions = (watch.lastScan?.additions || []).map(item => ({
+    ...item,
+    url: accounts.get(item.accountId)?.baseUrl || ''
+  })).sort((a, b) => b.addedCount - a.addedCount || a.accountName.localeCompare(b.accountName));
   const sites = new Map((db.accounts || []).map(account => [account.id, account.name]));
   for (const alert of alerts) if (alert.accountId && alert.accountName) sites.set(alert.accountId, alert.accountName);
   const lastCheckedAt = monitored.map(account => account.inviteCountCheckedAt || '').sort().at(-1) || null;
@@ -60,10 +59,11 @@ export function inviteAlertsView(db = readStore()) {
     alerts,
     unreadCount: alerts.filter(alert => alert.unread !== false).length,
     monitoredCount: monitored.length,
-    totalCount: counts.reduce((sum, account) => sum + account.count, 0),
-    counts,
+    recentAddedCount: recentAdditions.reduce((sum, item) => sum + item.addedCount, 0),
+    recentAdditions,
     sites: [...sites].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-    lastCheckedAt
+    lastCheckedAt,
+    lastScan: watch.lastScan || null
   };
 }
 

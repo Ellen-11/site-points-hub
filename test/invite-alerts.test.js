@@ -15,20 +15,23 @@ test('first invitation count creates a baseline and later increase creates an al
   const alert = recordInviteCount(db, account, 4, new Date('2026-09-06T01:00:00Z'));
   assert.equal(alert.addedCount, 2);
   assert.equal(inviteAlertsView(db).unreadCount, 1);
-  assert.equal(inviteAlertsView(db).totalCount, 4);
-  assert.deepEqual(inviteAlertsView(db).counts.map(item => [item.accountName, item.count]), [['A', 4]]);
+  assert.equal(inviteAlertsView(db).recentAddedCount, 0);
 });
 
-test('invitation view exposes linked per-site counts ordered by count', () => {
+test('invitation view exposes only latest linked additions, not cumulative totals', () => {
   const db = { accounts: [
     { id: 'a', name: 'A', baseUrl: 'https://a.example', inviteCount: 2 },
     { id: 'b', name: 'B', baseUrl: 'https://b.example', inviteCount: 5 },
     { id: 'c', name: 'C' }
-  ], inviteWatch: { alerts: [] } };
+  ], inviteWatch: { alerts: [], lastScan: { monitored: 3, refreshed: 3, failed: 0, checkedAt: '2026-09-06T01:00:00Z', additions: [
+    { accountId: 'a', accountName: 'A', addedCount: 1 },
+    { accountId: 'b', accountName: 'B', addedCount: 3 }
+  ] } } };
   const view = inviteAlertsView(db);
-  assert.equal(view.totalCount, 7);
-  assert.deepEqual(view.counts.map(item => [item.accountName, item.count]), [['B', 5], ['A', 2]]);
-  assert.equal(view.counts[0].url, 'https://b.example');
+  assert.equal(view.recentAddedCount, 4);
+  assert.deepEqual(view.recentAdditions.map(item => [item.accountName, item.addedCount]), [['B', 3], ['A', 1]]);
+  assert.equal(view.recentAdditions[0].url, 'https://b.example');
+  assert.equal(Object.hasOwn(view, 'totalCount'), false);
 });
 
 test('a lower or unchanged invitation count only updates the baseline', () => {

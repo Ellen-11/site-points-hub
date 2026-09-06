@@ -75,6 +75,47 @@ app.delete('/api/price-alerts/:id', auth, (req, res) => {
 });
 app.delete('/api/price-alerts', auth, (_req, res) => res.json(clearPriceAlerts()));
 app.get('/api/invite-alerts', auth, (_req, res) => res.json(inviteAlertsView()));
+let activeInviteScan = null;
+async function performInviteScan() {
+  const snapshot = readStore();
+  const candidates = snapshot.accounts.filter(account => account.enabled !== false);
+  const previousCounts = new Map(candidates.map(account => [
+    account.id,
+    account.inviteCount !== undefined && account.inviteCount !== null && Number.isFinite(Number(account.inviteCount))
+      ? Math.trunc(Number(account.inviteCount)) : null
+  ]));
+  const additions = []; const errors = []; let refreshed = 0;
+  for (const account of candidates) {
+    try {
+      const result = await runAccount(account.id, 'poll');
+      if (result.lastStatus !== 'ok') {
+        errors.push({ accountId: account.id, accountName: account.name, message: result.lastError || '检测失败' });
+        continue;
+      }
+      refreshed++;
+      const previous = previousCounts.get(account.id); const current = Number(result.inviteCount);
+      if (previous !== null && Number.isFinite(current) && current > previous) {
+        additions.push({ accountId: account.id, accountName: account.name, addedCount: Math.trunc(current) - previous });
+      }
+    } catch (error) {
+      errors.push({ accountId: account.id, accountName: account.name, message: error.message });
+    }
+  }
+  const db = readStore(); db.inviteWatch ||= {};
+  db.inviteWatch.lastScan = {
+    monitored: candidates.length, refreshed, failed: errors.length,
+    addedCount: additions.reduce((sum, item) => sum + item.addedCount, 0),
+    additions, errors: errors.slice(0, 30), checkedAt: new Date().toISOString()
+  };
+  writeStore(db);
+  return inviteAlertsView(db);
+}
+app.post('/api/invite-alerts/scan', auth, async (_req, res) => {
+  try {
+    if (!activeInviteScan) activeInviteScan = performInviteScan().finally(() => { activeInviteScan = null; });
+    res.json(await activeInviteScan);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.delete('/api/invite-alerts/:id', auth, (req, res) => {
   try { res.json(dismissInviteAlert(req.params.id)); } catch (error) { res.status(404).json({ error: error.message }); }
 });
