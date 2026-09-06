@@ -135,6 +135,7 @@ test('formats New API quota units', () => {
 test('classifies check-in business results', () => {
   assert.deepEqual(classifyCheckin({ success: true, message: '签到成功' }), { status: 'ok', message: '签到成功' });
   assert.deepEqual(classifyCheckin({ success: false, message: '今日已签到' }), { status: 'already', message: '今日已签到' });
+  assert.deepEqual(classifyCheckin({ success: false, message: 'Checked in' }), { status: 'already', message: 'Checked in' });
   assert.throws(() => classifyCheckin({ success: false, message: 'Token 无效' }), /Token 无效/);
 });
 

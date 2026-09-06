@@ -198,6 +198,15 @@ function turnstileReadyExpression() {
     .some(element => String(element.value || element.textContent || '').trim().length > 20))()`;
 }
 
+function alreadyCheckedInExpression() {
+  return `(() => {
+    const normalize = value => String(value || '').toLowerCase().replace(/[^a-z0-9\\u4e00-\\u9fff]+/g, '');
+    const states = new Set(['checkedin','alreadycheckedin','alreadysignedin','已签到','今日已签到']);
+    return [...document.querySelectorAll('button,[role="button"],input[type="button"],input[type="submit"]')]
+      .some(element => element.getClientRects().length && states.has(normalize(element.innerText || element.textContent || element.value || element.getAttribute('aria-label'))));
+  })()`;
+}
+
 async function performLoginAction(target, options = {}) {
   const expected = normalizeLoginActionText(options.actionText);
   if (!expected) return { clicked: false, token: '' };
@@ -400,6 +409,12 @@ export async function checkinInBrowser(baseUrl, endpoint, options = {}) {
     await client.call('Runtime.enable');
     await client.call('Network.enable');
     await waitForOrigin(client, new URL(baseUrl).origin);
+
+    const alreadyCheckedIn = await evaluateUntil(client, alreadyCheckedInExpression(), 10);
+    if (alreadyCheckedIn) {
+      closeWhenDone = true;
+      return { success: false, message: '今日已签到（Checked in）' };
+    }
 
     if (options.turnstile) {
       const ready = await evaluateUntil(client, turnstileReadyExpression(), 150);
