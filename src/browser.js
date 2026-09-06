@@ -150,9 +150,6 @@ async function performLoginAction(target, options = {}) {
   try {
     await client.call('Runtime.enable');
     await client.call('Network.enable');
-    const beforeLogin = await client.call('Runtime.evaluate', { expression: storedTokenExpression(), returnByValue: true }).catch(() => null);
-    const beforeLoginToken = String(beforeLogin?.result?.value || '').trim();
-    options.ignoredTokens = [...new Set([...(options.ignoredTokens || []), beforeLoginToken].filter(Boolean))];
     const hasCredentials = Boolean(options.username && options.password);
     let captureReady = !hasCredentials;
     let finish;
@@ -257,12 +254,12 @@ export async function accessTokenInBrowser(baseUrl, loginOptions = {}) {
   loginOptions.ignoredTokens = [...new Set((loginOptions.ignoredTokens || []).map(token => String(token || '').trim()).filter(Boolean))];
   const origin = new URL(baseUrl).origin;
   const existing = await existingOriginTargets(origin);
-  if (existing[0] && loginOptions.actionText) {
-    const token = await recoverTokenWithLoginAction(existing[0], loginOptions, origin);
-    if (token) return token;
-  }
   for (const target of existing) {
     const token = await tokenFromTarget(target, false, loginOptions.ignoredTokens);
+    if (token) return token;
+  }
+  if (existing[0] && loginOptions.actionText) {
+    const token = await recoverTokenWithLoginAction(existing[0], loginOptions, origin);
     if (token) return token;
   }
   if (existing[0]) return tokenFromTarget(existing[0], true, loginOptions.ignoredTokens);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bearerTokenFromHeaders, normalizeLoginActionText } from '../src/browser.js';
-import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
+import { browserLoginOptions, buildModelCatalog, buildPerCallCatalog, classifyCheckin, estimateAccountCalls, estimateRemainingCalls, formatNewApiQuota, formatQuota, hasModelPricing, isAuthenticationError, isExpiredAuthentication, isHtmlResponse, isRateLimitedError, modelApiUrl, modelCategory, modelsFromPricing, pricingAuthType, pricingGroupRatio, pricingRequestAccount, readConfiguredBalance, readRemainingQuota, refreshCookieFromHeaders, retryTwice, serializeAccountRun, shouldPoll, shouldUseBrowserSession, summarizeModelPrice, tokenFromRefresh, valueAt } from '../src/runner.js';
 
 test('reads rotated bearer credentials from refresh responses', () => {
   assert.equal(tokenFromRefresh({ success: true, data: { access_token: 'Bearer fresh-token' } }), 'fresh-token');
@@ -53,6 +53,8 @@ test('browser recovery never retries HTTP 429 rate limits', async () => {
   }, 0, error => !isRateLimitedError(error)), /429/);
   assert.equal(attempts, 1);
   assert.equal(isRateLimitedError(new Error('请求过于频繁')), true);
+  assert.equal(isAuthenticationError(new Error('Unauthorized (HTTP 401)')), true);
+  assert.equal(isAuthenticationError(new Error('upstream unavailable (HTTP 500)')), false);
 });
 
 test('reads bearer tokens captured from browser network requests', () => {

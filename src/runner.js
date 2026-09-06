@@ -96,6 +96,10 @@ export function isRateLimitedError(error) {
   return /(?:HTTP\s*)?429\b|too many requests|rate.?limit|请求过于频繁|访问过于频繁|频率限制/i.test(String(error?.message || error || ''));
 }
 
+export function isAuthenticationError(error) {
+  return /\b(?:401|403)\b|unauthorized|invalid\s+(access\s+)?token|not\s+logged\s+in|登录已?失效|未登录|请先登录/i.test(String(error?.message || error || ''));
+}
+
 export async function retryTwice(task, delayMs = 0, shouldRetry = () => true) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -149,12 +153,13 @@ function browserAuthHeaders(account, panelType, includeCredential = false) {
   return headers;
 }
 
-async function recoverWithBrowserOnce(account, endpoint, method, panelType, body) {
+async function recoverWithBrowserOnce(account, endpoint, method, panelType, body, rejectedTokens = new Set()) {
   let browserError;
   try {
     const ignoredTokens = [
       account.browserAccessToken ? decrypt(account.browserAccessToken) : '',
-      panelType === 'generic' && account.credential ? decrypt(account.credential) : ''
+      panelType === 'generic' && account.credential ? decrypt(account.credential) : '',
+      ...rejectedTokens
     ].filter(Boolean);
     const token = await accessTokenInBrowser(account.baseUrl, { ...browserLoginOptions(account), ignoredTokens });
     if (token) {
@@ -169,6 +174,7 @@ async function recoverWithBrowserOnce(account, endpoint, method, panelType, body
         return { data };
       } catch (error) {
         account.browserAccessToken = previousBrowserAccessToken;
+        if (isAuthenticationError(error)) rejectedTokens.add(token);
         if (isRateLimitedError(error)) throw error;
         throw error;
       }
@@ -208,8 +214,9 @@ async function recoverAuthentication(account, endpoint, method, panelType, retri
     }
   }
   if (shouldUseBrowserSession(account, panelType, retried)) {
+    const rejectedTokens = new Set();
     try {
-      return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body), 600, error => !isRateLimitedError(error));
+      return await retryTwice(() => recoverWithBrowserOnce(account, endpoint, method, panelType, body, rejectedTokens), 600, error => !isRateLimitedError(error));
     } catch (error) {
       if (isRateLimitedError(error)) throw new Error(`站点请求过于频繁 (HTTP 429)，已停止自动重试，请稍后再试`);
       const details = refreshError ? `；刷新接口：${refreshError.message}` : '';
